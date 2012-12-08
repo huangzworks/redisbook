@@ -9,7 +9,10 @@ Redis 设计与实现
 
 **第一部分：内部数据结构**
 
-动态字符串 —— simple dynamic string (sds)
+.. toctree::
+   :maxdepth: 2
+
+   internal-datastruct/sds
 
 双端链表 —— adlist
 
@@ -82,9 +85,6 @@ Append Only File 模式 —— aof
 
 
 
-
-.. toctree::
-   :maxdepth: 2
 
 
 

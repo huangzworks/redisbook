@@ -1,0 +1,11 @@
+digraph sdshdr {
+    rankdir = LR;
+    start_of_sdshdr [label="sds - sizeof(struct sdshdr)", shape=plaintext];
+    start_of_buf [label="sds", shape=plaintext];
+
+    node[shape=record];
+    sdshdr [label="struct sdshdr|{<len>len|<free>free|<start_of_buf>buf}"];
+
+    start_of_sdshdr -> sdshdr;
+    start_of_buf -> sdshdr:start_of_buf;
+}
