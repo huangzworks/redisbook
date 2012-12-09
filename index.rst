@@ -13,12 +13,9 @@ Redis 设计与实现
    :maxdepth: 2
 
    internal-datastruct/sds
-
-双端链表 —— adlist
-
-字典 —— dict
-
-跳跃表 —— skiplist
+   internal-datastruct/adlist
+   internal-datastruct/dict
+   internal-datastruct/skiplist
 
 
 **第二部分：内存映射数据结构**
@@ -81,17 +78,9 @@ Append Only File 模式 —— aof
 集群 —— cluster
 
 
-
-
-
-
-
-
-
 Indices and tables
 ==================
 
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-
