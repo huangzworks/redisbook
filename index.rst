@@ -16,6 +16,7 @@ Redis 设计与实现
    internal-datastruct/adlist
    internal-datastruct/dict
    internal-datastruct/skiplist
+   internal-datastruct/compress-datastruct
 
 
 **第二部分：内存映射数据结构**
@@ -29,7 +30,10 @@ zipmap
 
 **第三部分：Redis 数据类型**
 
-对象处理机制 —— object
+.. toctree::
+   :maxdepth: 2
+
+   datatype/object
 
 字符串 —— t_string
 
@@ -76,6 +80,14 @@ Append Only File 模式 —— aof
 监视器 —— Sentinel
 
 集群 —— cluster
+
+
+**附录**
+
+.. toctree::
+   :maxdepth: 1
+
+   reference
 
 
 Indices and tables
