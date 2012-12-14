@@ -260,6 +260,9 @@ intset 运行实例
   
     bit     0   15    31   47     63        95       127
     value   |    1     |    2     |    3    |  65535  |
+                                                 ^
+                                                 |
+                                                add
 
 将 ``intset->length`` 设置为 ``4`` 。 
 
@@ -269,7 +272,7 @@ intset 运行实例
 
     intset->encoding = INTSET_ENC_INT32;
     intset->length = 4;
-    intset-contents = [1, 2, 3, 65535];
+    intset->contents = [1, 2, 3, 65535];
 
 
 关于升级
@@ -302,7 +305,7 @@ intset 运行实例
 在进行升级的过程中，需要对数组内的元素进行『类型转换』和『移动』的操作。
 
 其中，移动不仅出现在升级（\ ``intsetUpgradeAndAdd``\ ）操作中，
-还出现其他对 ``contents`` 数组长度进行更改的操作上，
+还出现其他对 ``contents`` 数组内容进行增删的操作上，
 比如 ``intsetAdd`` 和 ``intsetRemove`` ，
 因为这种移动操作需要处理的元素数量等于集合中个数的长度，
 所以这些函数的复杂度都不低于 :math:`O(n)` 。
