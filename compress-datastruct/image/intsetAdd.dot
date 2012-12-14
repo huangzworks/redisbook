@@ -1,0 +1,33 @@
+digraph intsetAdd {
+
+    node [shape=box];
+
+    start [label="intsetAdd"];
+
+    check_encoding [label="集合当前的编码类型是否适用于新元素？"];
+
+    start -> check_encoding;
+
+
+    upgrade [label="调用 intsetUpgradeAndAdd\n升级集合，并将新元素添加到升级后的集合中"];
+
+    check_encoding -> upgrade [label="不适用"];
+
+    value_exists [label="元素已经存在于集合？"];
+
+    check_encoding -> value_exists [label="适用"];
+
+
+    insert_fail [label="添加失败，元素已存在"];
+
+    realloc_and_move [label="为新元素分配内存\n并对 contents 数组中现有的元素进行移动，\n确保新元素会被放到有序数组正确的位置上"];
+    
+    value_exists -> insert_fail [label="是"];
+
+    value_exists -> realloc_and_move [label="否"];
+
+
+    done [label="将新元素的值保存到 contents 数组中\n更新 length 计数器"];
+
+    realloc_and_move -> done;
+}

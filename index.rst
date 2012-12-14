@@ -16,16 +16,26 @@ Redis 设计与实现
    internal-datastruct/adlist
    internal-datastruct/dict
    internal-datastruct/skiplist
-   internal-datastruct/compress-datastruct
 
 
 **第二部分：内存映射数据结构**
 
-intset
+主要思想：想办法用使用更少的空间来保存数据。
 
-ziplist
+没有免费午餐 —— 用时间换空间 —— 操作复杂，容易出错。
 
-zipmap
+通过更复杂的操作(更多 CPU)，让保存数据所需的内存尽可能地减少(更少的内存)。
+
+.. note::
+
+    使用图示来说明 memory layout !!!!!!!!!!!!!!!!!!!
+
+.. toctree::
+   :maxdepth: 2
+
+   compress-datastruct/intset
+   compress-datastruct/ziplist
+   compress-datastruct/zipmap
 
 
 **第三部分：Redis 数据类型**
