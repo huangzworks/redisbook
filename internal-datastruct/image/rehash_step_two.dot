@@ -1,0 +1,71 @@
+digraph rehash_step_two {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record];
+
+    // nodes
+
+    dict [label="dict | type | privdata |<ht> ht[2] | rehashidx:2 | iterators"];
+
+    ht0 [label="<dictht>dictht |<table> table | size:4 | sizemask:3 | used:1"];
+
+    ht1 [label="<dictht>dictht |<table> table | size:8 | sizemask:7 | used:3"];
+
+    bucket [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 "];
+
+    bucket1 [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 |<table4> 4 |<table5> 5 |<table6> 6 |<table7> 7"];
+
+    pair_1 [label="dictEntry |{<start>key1 | value1 |<next>next}"];
+
+    pair_2 [label="dictEntry |{<start>key2 | value2 |<next>next}"];
+
+    pair_3 [label="dictEntry |{<start>key3 | value3 |<next>next}"];
+
+    pair_4 [label="dictEntry |{<start>key4 | value4 |<next>next}"];
+
+    // null for bucket 0
+    null0 [label="NULL", shape=plaintext];
+    null1 [label="NULL", shape=plaintext];
+    null2 [label="NULL", shape=plaintext];
+    null3 [label="NULL", shape=plaintext];
+
+    // null for bucket 1
+    null10 [label="NULL", shape=plaintext];
+    null11 [label="NULL", shape=plaintext];
+    null12 [label="NULL", shape=plaintext];
+    null13 [label="NULL", shape=plaintext];
+    null14 [label="NULL", shape=plaintext];
+    null15 [label="NULL", shape=plaintext];
+    null16 [label="NULL", shape=plaintext];
+    null17 [label="NULL", shape=plaintext];
+
+    // lines
+
+    dict:ht -> ht0:dictht [label="ht[0]"];
+    dict:ht -> ht1:dictht [label="ht[1]"];
+
+    ht0:table -> bucket:head;
+
+    ht1:table -> bucket1:head;
+
+    bucket:table0 -> null0;
+
+    bucket:table1 -> null1;
+
+    bucket:table2 -> null2;
+
+    bucket:table3 -> pair_3:start; pair_3:next -> null3;
+
+    bucket1:table0 -> null10;
+    bucket1:table1 -> pair_4:start; pair_4:next -> null11;
+    bucket1:table2 -> null12;
+    bucket1:table3 -> pair_2:start; pair_2:next -> null13;
+    bucket1:table4 -> null14;
+    bucket1:table5 -> null15;
+    bucket1:table6 -> pair_1:start; pair_1:next -> null16;
+    bucket1:table7 -> null17;
+
+}

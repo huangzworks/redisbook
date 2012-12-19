@@ -1,0 +1,34 @@
+digraph rehash_step {
+
+    // callers
+
+    dictAdd [shape=box, label="dictAdd"];
+
+    dictFind [shape=box, label="dictFind"];
+
+    dictDelete [shape=box, label="dictDelete"];
+
+    dictGetRandomKey [shape=box, label="dictGetRandomKey"];
+
+    // rehash
+
+    rehashing_or_not [shape=diamond, label="正在进行 rehash ？"];
+
+    _dictRehashStep [shape=box, label="_dictRehashStep"];
+
+    one_index [shape=plaintext, label="将 ht[0] 第一个不为空索引上的所有节点迁移至 ht[1]"];
+
+    // edge
+
+    dictAdd -> rehashing_or_not;
+
+    dictFind -> rehashing_or_not;
+
+    dictDelete -> rehashing_or_not;
+
+    dictGetRandomKey -> rehashing_or_not;
+
+    rehashing_or_not -> _dictRehashStep [label="是"];
+
+    _dictRehashStep -> one_index;
+}

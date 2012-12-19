@@ -1,0 +1,37 @@
+digraph before_key_collision {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record];
+
+    // nodes
+
+    bucket [label="dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 "];
+
+    pair_1 [label="dictEntry |{<start>key1 | value1 |<next>next}"];
+
+    pair_2 [label="dictEntry |{<start>key2 | value2 |<next>next}"];
+
+    pair_3 [label="dictEntry |{<start>key3 | value3 |<next>next}"];
+
+    null0 [label="NULL", shape=plaintext];
+    null1 [label="NULL", shape=plaintext];
+    null2 [label="NULL", shape=plaintext];
+    null3 [label="NULL", shape=plaintext];
+
+    // lines
+
+    bucket:table0 -> pair_1:start; pair_1:next -> null0;
+
+    bucket:table1 -> null1;
+
+    bucket:table2 -> pair_2:start; pair_2:next -> null2;
+
+    bucket:table3 -> pair_3:start; pair_3:next -> null3;
+
+    // label
+
+    label = "添加碰撞节点之前";
+}
