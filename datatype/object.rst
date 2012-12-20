@@ -111,3 +111,9 @@ question
 ------------
 
 为什么要有 Redis Object ？它解决了什么问题？
+
+
+共享对象
+---------------
+
+``tryObjectEncoding`` 尝试将一个字符出对象编码为 ``REDIS_ENCODING_INT`` ，如果条件合适的话，就将它加入到 ``shared`` 。
