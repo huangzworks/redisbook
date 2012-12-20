@@ -44,52 +44,40 @@ Redis 设计与实现
    :maxdepth: 2
 
    datatype/object
-
-字符串 —— t_string
-
-哈希表 —— t_hash
-
-列表 —— t_list
-
-集合 —— t_set
-
-有序集合 —— t_zset
+   datatype/string
+   datatype/hash
+   datatype/list
+   datatype/set
+   datatype/sorted_set
 
 
 **第四部分：功能的实现**
 
-二进制操作 —— bitop
+.. toctree::
+   :maxdepth: 2
 
-事务 —— multi
-
-发送与订阅 —— pubsub
-
-Lua 脚本 —— scripting
-
-慢查询报告 —— slowlog
-
-SORT 命令 —— sort
+   feature/bitop
+   feature/transaction
+   feature/pubsub
+   feature/scripting
+   feature/slowlog
+   feature/sort
 
 
 **第五步分：运作机制**
 
-启动与初始化 —— redis
+.. toctree::
+   :maxdepth: 2
 
-事务处理与多路复用 —— ae
-
-服务端的连接和处理 —— networking
-
-数据库 —— db
-
-持久化 —— rdb & rio
-
-Append Only File 模式 —— aof
-
-同步 —— replication
-
-监视器 —— Sentinel
-
-集群 —— cluster
+   internal/redis
+   internal/ae
+   internal/networking
+   internal/db
+   internal/persistent
+   internal/aof
+   internal/replication
+   internal/sentinel
+   internal/cluster
 
 
 **附录**
