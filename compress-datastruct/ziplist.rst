@@ -38,7 +38,9 @@ ziplist 的构成
                 +---------+--------+-------+--------+--------+--------+--------+-------+
                                            ^                          ^        ^
     address                                |                          |        |
-                                         head                       tail      end
+                                    ZIPLIST_ENTRY_HEAD                |   ZIPLIST_ENTRY_END
+                                                                      |
+                                                             ZIPLIST_ENTRY_TAIL
 
 图中各个域的作用如下：
 
@@ -68,9 +70,9 @@ ziplist 的构成
 ``ZIPLIST_TAIL_OFFSET(ziplist)``    取出 ``zltail`` 的值                                                                :math:`\theta(1)`
 ``ZIPLIST_LENGTH(ziplist)``         取出 ``zllen`` 的值                                                                 :math:`\theta(1)`
 ``ZIPLIST_HEADER_SIZE``             返回 ziplist header 部分的长度，总是固定的 10 字节                                  :math:`\theta(1)`
-``ZIPLIST_ENTRY_HEAD(ziplist)``     返回到达 ziplist 第一个节点（表头）的地址（图中 ``head`` 所指向的位置）             :math:`\theta(1)`
-``ZIPLIST_ENTRY_TAIL(ziplist)``     返回到达 ziplist 最后一个节点（表尾）的地址（图中 ``tail`` 所指向的位置）           :math:`\theta(1)`
-``ZIPLIST_ENTRY_END(ziplist)``      返回 ziplist 的末端，也即是 ``zlend`` 之前的地址（图中 ``end`` 所指向的位置）       :math:`\theta(1)`
+``ZIPLIST_ENTRY_HEAD(ziplist)``     返回到达 ziplist 第一个节点（表头）的地址                                           :math:`\theta(1)`
+``ZIPLIST_ENTRY_TAIL(ziplist)``     返回到达 ziplist 最后一个节点（表尾）的地址                                         :math:`\theta(1)`
+``ZIPLIST_ENTRY_END(ziplist)``      返回 ziplist 的末端，也即是 ``zlend`` 之前的地址                                    :math:`\theta(1)`
 ================================== ================================================================================== =================
 
 因为 ziplist header 部分的长度总是固定的（\ ``4`` 字节 + ``4`` 字节 + ``2`` 字节），
@@ -281,9 +283,13 @@ content
                 +---------+--------+-------+-----------+
                                            ^
                                            |
-    address                           tail & end
+                                   ZIPLIST_ENTRY_HEAD
+                                           &
+    address                        ZIPLIST_ENTRY_TAIL
+                                           &
+                                   ZIPLIST_ENTRY_END
 
-空白 ziplist 的表尾和末端处于同一地址。
+空白 ziplist 的表头、表尾和末端处于同一地址。
 
 创建了 ziplist 之后，
 就可以往里面添加新节点了，
@@ -324,7 +330,9 @@ content
                 +---------+--------+-------+----------------+-----------+
                                            ^                ^
                                            |                |
-    address                              tail              end
+    address                         ZIPLIST_ENTRY_HEAD   ZIPLIST_ENTRY_END
+                                           &
+                                    ZIPLIST_ENTRY_TAIL
 
 然后执行步骤 2 ，程序需要计算新节点所需的空间：
 
@@ -363,7 +371,10 @@ content
                 +---------+--------+-------+----------------+------------------+-----------+
                                            ^                ^
                                            |                |
-    address                              tail              end
+    address                       ZIPLIST_ENTRY_HEAD   ZIPLIST_ENTRY_END
+                                           &
+                                  ZIPLIST_ENTRY_TAIL
+                    
 
 步骤三，更新新节点的各项属性（为了表示的简单， ``content`` 以字符串而不是二进制表示）：
 
@@ -390,7 +401,10 @@ content
                 +---------+--------+-------+----------------+------------------+-----------+
                                            ^                ^
                                            |                |
-    address                              tail              end
+    address                       ZIPLIST_ENTRY_HEAD   ZIPLIST_ENTRY_END
+                                           &
+                                  ZIPLIST_ENTRY_TAIL
+ 
 
 最后一步，更新 ziplist 的 ``zlbytes`` 、 ``zltail`` 和 ``zllen`` 属性：
 
@@ -415,9 +429,11 @@ content
                 |         |        |       |                | "hello world"    |           |
                 |         |        |       |                |                  |           |
                 +---------+--------+-------+----------------+------------------+-----------+
-                                                            ^                  ^
-                                                            |                  |
-    address                                               tail                end
+                                           ^                ^                  ^
+                                           |                |                  |
+    address                                |          ZIPLIST_ENTRY_TAIL   ZIPLIST_ENTRY_END
+                                           |
+                                   ZIPLIST_ENTRY_HEAD
 
 到这一步，添加新节点到表尾的工作正式完成。
 
