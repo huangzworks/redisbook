@@ -1,0 +1,30 @@
+digraph redis_hash {
+
+    node [shape=plaintext];
+
+    // type
+
+    REDIS_HASH [label="哈希表\nREDIS_HASH"];
+
+    // encoding
+
+    REDIS_ENCODING_ZIPLIST [label="ziplist\nREDIS_ENCODING_ZIPLIST"];
+    REDIS_ENCODING_HT [label="字典\nREDIS_ENCODING_HT"];
+
+    // edge
+
+    REDIS_HASH -> REDIS_ENCODING_ZIPLIST;
+    REDIS_HASH -> REDIS_ENCODING_HT;
+
+    // datastruct 1
+
+    ziplist [label="ziplist"];
+
+    REDIS_ENCODING_ZIPLIST -> ziplist;
+
+    // datastruct 2
+
+    dict [label="dict.h/dict"];
+
+    REDIS_ENCODING_HT -> dict;
+}

@@ -1,0 +1,46 @@
+digraph command_poly {
+    node [shape=box];
+
+    lpop [label="LPOP key"];
+
+    get_key_obj_from_db [label="Redis 从数据库中查找 key \n对应的 redisObject 结构"];
+
+    is_obj_nil_or_not [label="数据库返回 NULL ？",shape=diamond];
+
+    return_nil [label="key 不存在\n返回 nil"];
+
+    is_type_list_or_not [label="redisObject 的类型为\nREDIS_LIST ？",shape=diamond];
+
+    call_poly_pop_function [label="调用多态 pop 函数", shape=diamond];
+
+    return_type_error [label="key 不是列表\n返回类型错误"];
+
+    pop_from_ziplist [label="从 ziplist 中弹出最左节点"];
+
+    pop_from_linkedlist [label="从双端链表中弹出最左节点"];
+
+    return_pop_item [label="返回被弹出的元素"];
+
+    // edge
+
+    lpop -> get_key_obj_from_db;
+
+    get_key_obj_from_db -> is_obj_nil_or_not;
+
+    is_obj_nil_or_not -> return_nil [label="是"];
+
+    is_obj_nil_or_not -> is_type_list_or_not [label="否"];
+
+    is_type_list_or_not -> call_poly_pop_function [label="是"];
+
+    is_type_list_or_not -> return_type_error [label="否"];
+
+    call_poly_pop_function -> pop_from_ziplist [label="对象的编码为\nZIPLIST"];
+
+    call_poly_pop_function -> pop_from_linkedlist [label="对象的编码为\nLINKEDLIST"];
+
+    pop_from_ziplist -> return_pop_item;
+
+    pop_from_linkedlist -> return_pop_item;
+
+}

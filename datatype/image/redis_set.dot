@@ -1,0 +1,30 @@
+digraph redis_set {
+    
+    node [shape=plaintext];
+
+    // type
+
+    REDIS_SET [label="集合\nREDIS_SET"];
+
+    // encoding
+
+    REDIS_ENCODING_INTSET [label="intset\nREDIS_ENCODING_INTSET"];
+    REDIS_ENCODING_HT [label="字典\nREDIS_ENCODING_HT"];
+
+    // edge
+
+    REDIS_SET -> REDIS_ENCODING_INTSET;
+    REDIS_SET -> REDIS_ENCODING_HT;
+
+    // datastruct 1
+
+    intset [label="intset.h/intset"];
+
+    REDIS_ENCODING_INTSET -> intset;
+
+    // datastruct 2
+
+    dict [label="dict.h/dict"];
+    
+    REDIS_ENCODING_HT -> dict;
+}

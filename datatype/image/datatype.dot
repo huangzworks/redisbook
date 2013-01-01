@@ -1,0 +1,52 @@
+digraph datatype {
+
+    rankdir=LR;
+
+    node[shape=plaintext];
+
+    // obj
+
+    redisObject [label="redisObject"];
+
+    // type
+
+    REDIS_STRING [label="字符串\nREDIS_STRING"];
+    REDIS_LIST [label="列表\nREDIS_LIST"];
+    REDIS_SET [label="集合\nREDIS_SET"];
+    REDIS_ZSET [label="有序集合\nREDIS_ZSET"];
+    REDIS_HASH [label="哈希表\nREDIS_HASH"];
+
+    // encoding
+
+    REDIS_ENCODING_RAW [label="字符串\nREDIS_ENCODING_RAW"];
+    REDIS_ENCODING_INT [label="整数\nREDIS_ENCODING_INT"];
+    REDIS_ENCODING_HT [label="字典\nREDIS_ENCODING_HT"];
+    //REDIS_ENCODING_ZIPMAP [label="zipmap\nREDIS_ENCODING_ZIPMAP"];
+    REDIS_ENCODING_LINKEDLIST [label="双端链表\nREDIS_ENCODING_LINKEDLIST"];
+    REDIS_ENCODING_ZIPLIST [label="ziplist\nREDIS_ENCODING_ZIPLIST"];
+    REDIS_ENCODING_INTSET [label="intset\nREDIS_ENCODING_INTSET"];
+    REDIS_ENCODING_SKIPLIST [label="跳跃表\nREDIS_ENCODING_SKIPLIST"];
+
+    // edge
+
+    redisObject -> REDIS_STRING;
+    redisObject -> REDIS_LIST;
+    redisObject -> REDIS_SET;
+    redisObject -> REDIS_ZSET;
+    redisObject -> REDIS_HASH;
+
+    REDIS_STRING -> REDIS_ENCODING_RAW;
+    REDIS_STRING -> REDIS_ENCODING_INT;
+
+    REDIS_LIST -> REDIS_ENCODING_LINKEDLIST;
+    REDIS_LIST -> REDIS_ENCODING_ZIPLIST;
+
+    REDIS_SET -> REDIS_ENCODING_HT;
+    REDIS_SET -> REDIS_ENCODING_INTSET;
+
+    REDIS_ZSET -> REDIS_ENCODING_SKIPLIST;
+    REDIS_ZSET -> REDIS_ENCODING_ZIPLIST;
+
+    REDIS_HASH -> REDIS_ENCODING_HT;
+    REDIS_HASH -> REDIS_ENCODING_ZIPLIST;
+}

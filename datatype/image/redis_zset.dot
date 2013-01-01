@@ -1,0 +1,36 @@
+digraph redis_zset {
+    
+    node [shape=plaintext];
+
+    // type
+
+    REDIS_ZSET [label="有序集合\nREDIS_ZSET"];
+
+    // encoding
+
+    REDIS_ENCODING_ZIPLIST [label="ziplist\nREDIS_ENCODING_ZIPLIST"];
+    REDIS_ENCODING_SKIPLIST [label="跳跃表\nREDIS_ENCODING_SKIPLIST"];
+
+    // edge
+
+    REDIS_ZSET -> REDIS_ENCODING_ZIPLIST;
+    REDIS_ZSET -> REDIS_ENCODING_SKIPLIST;
+
+    // datastruct 1
+
+    ziplist [label="ziplist"];
+
+    REDIS_ENCODING_ZIPLIST -> ziplist;
+
+    // datastruct 2
+
+    zset [label="redis.h/zset"];
+
+    dict [label="dict.h/dict"];
+    zskiplist [label="redis.h/zskiplist"];
+
+    REDIS_ENCODING_SKIPLIST -> zset;
+
+    zset -> dict;
+    zset -> zskiplist;
+}

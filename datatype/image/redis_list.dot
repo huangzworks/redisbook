@@ -1,0 +1,32 @@
+digraph redis_list {
+
+    node[shape=plaintext];
+
+    // type
+
+    REDIS_LIST [label="列表\nREDIS_LIST"];
+
+    // encoding
+
+    REDIS_ENCODING_ZIPLIST [label="ziplist\nREDIS_ENCODING_ZIPLIST"];
+    REDIS_ENCODING_LINKEDLIST [label="双端链表\nREDIS_ENCODING_LINKEDLIST"];
+
+    // edge
+
+    REDIS_LIST -> REDIS_ENCODING_LINKEDLIST;
+    REDIS_LIST -> REDIS_ENCODING_ZIPLIST;
+
+    REDIS_ENCODING_LINKEDLIST -> list;
+    REDIS_ENCODING_ZIPLIST -> ziplist;
+
+    // datastruct 1
+    
+    list [label="adlist.h/list"];
+
+    // datastruct 2
+
+    ziplist [label="ziplist"];
+
+}
+    
+
