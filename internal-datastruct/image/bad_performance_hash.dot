@@ -1,0 +1,115 @@
+digraph bad_performance_hash {
+
+    rankdir = LR;
+    node [shape=record];
+
+    // bucket
+
+    bucket [label="bucket |<0> 0 |<1> 1 |<2> 2 |<3> 3 |<4> 4 |<5> 5 |<6> 6 |<7> 7"];
+
+    // nodes
+
+    node [height=.1];
+
+    // node 0
+    node0 [label="Entry"];
+    node01 [label="Entry"];
+    node02 [label="Entry"];
+    node03 [label="Entry"];
+    node04 [label="Entry"];
+    node05 [label="Entry"];
+
+    bucket:0 -> node0;
+    node0 -> node01;
+    node01 -> node02;
+    node02 -> node03;
+    node03 -> node04;
+    node04 -> node05;
+
+    // node 1
+    node1 [label="Entry"];
+    node11 [label="Entry"];
+    node12 [label="Entry"];
+
+    bucket:1 -> node1;
+    node1 -> node11;
+    node11 -> node12;
+
+    // node 2
+    node2 [label="Entry"];
+    node21 [label="Entry"];
+    node22 [label="Entry"];
+    node23 [label="Entry"];
+    node24 [label="Entry"];
+
+    bucket:2 -> node2;
+    node2 -> node21;
+    node21 -> node22;
+    node22 -> node23;
+    node23 -> node24;
+
+    // node 3
+    node3 [label="Entry"];
+    node31 [label="Entry"];
+    node32 [label="Entry"];
+    node33 [label="Entry"];
+    node34 [label="Entry"];
+    node35 [label="Entry"];
+
+    bucket:3 -> node3;
+    node3 -> node31;
+    node31 -> node32;
+    node32 -> node33;
+    node33 -> node34;
+    node34 -> node35;
+
+    // node 4
+    node4 [label="Entry"];
+    node41 [label="Entry"];
+
+    bucket:4 -> node4;
+    node4 -> node41;
+
+    // node 5
+    node5 [label="Entry"];
+    node51 [label="Entry"];
+    node52 [label="Entry"];
+    node53 [label="Entry"];
+    node54 [label="Entry"];
+    node55 [label="Entry"];
+
+    bucket:5 -> node5;
+    node5 -> node51;
+    node51 -> node52;
+    node52 -> node53;
+    node53 -> node54;
+    node54 -> node55;
+
+    // node 6
+    node6 [label="Entry"];
+    node61 [label="Entry"];
+    node62 [label="Entry"];
+    node63 [label="Entry"];
+
+
+    bucket:6 -> node6;
+    node6 -> node61;
+    node61 -> node62;
+    node62 -> node63;
+
+    // node 7
+    node7 [label="Entry"];
+    node71 [label="Entry"];
+    node72 [label="Entry"];
+    node73 [label="Entry"];
+    node74 [label="Entry"];
+    node75 [label="Entry"];
+
+    bucket:7 -> node7;
+    node7 -> node71;
+    node71 -> node72;
+    node72 -> node73;
+    node73 -> node74;
+    node74 -> node75;
+
+}
