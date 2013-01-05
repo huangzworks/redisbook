@@ -1,0 +1,20 @@
+digraph list_and_list_node {
+    rankdir=LR;
+    node [shape=record];
+
+    list_node_1 [label = "<head>listNode |{<prev> prev| value|<next> next}"];
+    list_node_2 [label = "<head>listNode |{<prev> prev| value|<next> next}"];
+    list_node_3 [label = "<head>listNode |{<prev> prev| value|<next> next}"];
+
+    list_node_1:next -> list_node_2:head;
+    list_node_2:next -> list_node_3:head;
+
+    list_node_2:prev -> list_node_1:head;
+    list_node_3:prev -> list_node_2:head;
+
+    node [width=1.5];
+    list [label = "list |<head> head|<tail> tail|<dup> dup|<free> free|<match> match|<len> len"];
+
+    list:tail -> list_node_3:head;
+    list:head -> list_node_1:head;
+}
