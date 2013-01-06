@@ -1,0 +1,45 @@
+digraph push_generic_command {
+    
+    node [shape = record];
+
+    /*
+    lpush [label = "LPUSH key value [value ...]"];
+    rpush [label = "RPUSH key value [value ...]"];
+    linsert [label = "LINSERT key BEFORE\|AFTER pivot value"];
+    */
+
+    pushGenericCommand [label = "pushGenericCommand"];
+
+    key_wrong_type_or_not [label = "key 非空且不是列表？", shape = diamond];
+
+    return_wrong_type_error [label = "返回类型错误"];
+
+    key_empty_or_not [label = "key 为空？", shape = diamond];
+
+    // call_signal_list_as_ready [label = "调用 signalListAsReady"];
+
+    add_key_to_ready_list_if_need [label = "如果 key 存在于 server.db-\>blocking_keys\n那么为 key 创建一个 readyList 结构\n并将它添加到 server.ready_keys 链表中"];
+
+    push_value_to_list [label = "将输入值推入列表"];
+
+    /*
+    lpush -> pushGenericCommand;
+    rpush -> pushGenericCommand;
+    linsert -> pushGenericCommand;
+    */
+
+    pushGenericCommand -> key_wrong_type_or_not;
+
+    key_wrong_type_or_not -> return_wrong_type_error [label = "是"];
+
+    key_wrong_type_or_not -> key_empty_or_not [label = "否"];
+
+    // key_empty_or_not -> call_signal_list_as_ready [label = "是"];
+
+    // call_signal_list_as_ready -> add_key_to_ready_list_if_need;
+
+    key_empty_or_not -> add_key_to_ready_list_if_need [label = "是"];
+
+    key_empty_or_not -> push_value_to_list [label = "否"];
+    add_key_to_ready_list_if_need -> push_value_to_list;
+}

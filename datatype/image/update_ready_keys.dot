@@ -1,0 +1,25 @@
+digraph update_ready_keys {
+    rankdir = LR;
+    node [shape = record];
+
+    redisServer [label = "redisServer | ... |<ready_keys> ready_keys | ..."];
+
+    readyList [label = "<head>readyList |<db> db |<key> key"];
+
+    listNode [label = "<head>listNode |{<prev> prev |<next> next |<value> value} "];
+
+    null [label = "NULL", shape = plaintext];
+
+    redisServer:ready_keys -> listNode:head [label = "list"];
+    listNode:next -> null;
+    listNode:prev -> null;
+    listNode:value -> readyList:head;
+    
+    redisDb [label = "<head> redisDb | ... |<dict> dict | ..."];
+    readyList:db -> redisDb:head;
+
+    dict [label = "<head>dict\n(key space of DB) | ... |<key3> key3 | ..."];
+    redisDb:dict -> dict:head;
+
+    readyList:key -> dict:key3;
+}

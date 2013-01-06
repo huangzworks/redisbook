@@ -1,0 +1,31 @@
+digraph blpop_decide_block_or_not {
+
+    node [shape=record];
+
+    //
+
+    call_blpop [label = "BLPOP key"];
+
+    wrong_type_or_not [label = "key 非空且不是列表？", shape = diamond];
+
+    return_wrong_type [label = "返回类型错误"];
+
+    key_empty_or_not [label = "key 是否为空?", shape = diamond];
+
+    block_client [label = "阻塞客户端"];
+
+    lpop [label = "执行 LPOP key 命令"];
+
+    //
+
+    call_blpop -> wrong_type_or_not;
+
+    wrong_type_or_not -> return_wrong_type [label = "是"];
+
+    wrong_type_or_not -> key_empty_or_not [label = "否"];
+
+    key_empty_or_not -> block_client [label = "是"];
+
+    key_empty_or_not -> lpop [label = "否"];
+
+}
