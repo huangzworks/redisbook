@@ -1,0 +1,34 @@
+digraph hash_table_example {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record];
+
+    // nodes
+
+    ht1 [label="<dictht>dictht |<table> table | size:4 | sizemask:3 | used:3"];
+
+    bucket [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 "];
+
+    pair_1 [label="<head>dictEntry |{<key>key\nelem1 |<value>value\nNULL |<next>next\nNULL}"];
+
+    pair_2 [label="<head>dictEntry |{<key>key\nelem2 |<value>value\nNULL |<next>next\nNULL}"];
+
+    pair_3 [label="<head>dictEntry |{<key>key\nelem3 |<value>value\nNULL |<next>next\nNULL}"];
+
+    null1 [label="NULL", shape=plaintext];
+
+    // lines
+
+    ht1:table -> bucket:head;
+
+    bucket:table0 -> pair_1:head;
+
+    bucket:table1 -> null1;
+
+    bucket:table2 -> pair_2:head;
+
+    bucket:table3 -> pair_3:head;
+}
