@@ -1,0 +1,48 @@
+digraph exec_with_watch {
+
+    // setting
+
+    node [shape = record];
+
+    // nodes
+
+    exec [label = "EXEC"];
+
+    client_execing_transaction_or_not [label = "客户端正处于事务执行状态？", shape = diamond];
+
+    key_touched_or_error_occur_when_command_enqueue [label = "有被 WATCH 监视的 key 被修改？\n或者\n有错误在命令入队时发生？", shape = diamond];
+
+    return_error [label = "EXEC 只能在事务状态下执行\n返回错误"];
+
+    transaction_fail [label = "事务执行失败\n清空客户端的事务状态\n取消所有对 key 的监视\n 返回 NIL 回复给客户端"];
+
+    replicate_transaction [label = "向附属节点和 AOF 文件发送 MULTI 命令\n（如果有的话）"];
+
+    cancle_all_watch [label = "取消所有对 key 的监视"];
+
+    exec_all_command_in_queue [label = "执行事务中的所有命令"];
+
+    clean [label = "清除客户端的事务状态\n将事务执行结果返回给客户端"];
+
+    done [label = "事务执行完毕"];
+
+    // edges
+
+    exec -> client_execing_transaction_or_not;
+
+    client_execing_transaction_or_not -> return_error [label = "否"];
+
+    client_execing_transaction_or_not -> key_touched_or_error_occur_when_command_enqueue [label = "是"];
+
+    key_touched_or_error_occur_when_command_enqueue -> transaction_fail [label = "是"];
+
+    key_touched_or_error_occur_when_command_enqueue -> replicate_transaction [label = "否"];
+
+    replicate_transaction -> cancle_all_watch;
+
+    cancle_all_watch -> exec_all_command_in_queue;
+
+    exec_all_command_in_queue -> clean;
+
+    clean -> done;
+}

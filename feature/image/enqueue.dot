@@ -1,0 +1,28 @@
+digraph enqueue {
+
+    node [shape = record];
+
+    command_in [label = "服务器接到来自客户端的命令"];
+
+    in_transaction_or_not [label = "客户端是否正处在事务状态？", shape = diamond];
+
+    enqueu_command [label = "将命令放进事务队列里"];
+
+    return_enqueued [label = "向客户端返回 QUEUED 字符串\n表示命令已入队"];
+
+    exec_command [label = "执行命令"];
+
+    return_command_result [label = "向客户端返回命令的执行结果"];
+
+    // 
+
+    command_in -> in_transaction_or_not;
+
+    in_transaction_or_not -> enqueu_command [label = "是"];
+
+    in_transaction_or_not -> exec_command [label = "否"];
+
+    exec_command -> return_command_result;
+
+    enqueu_command -> return_enqueued;
+}
