@@ -42,7 +42,6 @@ Redis 设计与实现
 
    compress-datastruct/intset
    compress-datastruct/ziplist
-   compress-datastruct/zipmap
 
 
 **第三部分：Redis 数据类型**
