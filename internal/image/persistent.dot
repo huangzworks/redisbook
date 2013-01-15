@@ -1,0 +1,11 @@
+digraph persistent {
+    rankdir = LR;
+
+    memory_object [label = "内存中的数据对象"];
+
+    byte_in_file [label = "文件中的字节串"];
+
+    memory_object -> byte_in_file [label = "rdbSave\n持久化"];
+
+    byte_in_file -> memory_object [label = "rdbLoad\n载入"];
+}
