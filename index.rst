@@ -91,6 +91,7 @@ Redis 设计与实现
 .. toctree::
    :maxdepth: 1
 
+   internal-module
    reference
 
 
