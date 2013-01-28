@@ -1,0 +1,16 @@
+digraph dirty_cas {
+    rankdir = LR;
+    node [shape = circle];
+
+    label = "客户端状态的切换";
+
+    normal [label = "非事务状态"];
+
+    transaction [label = "事务状态"];
+
+    dirty_cas [label = "事务安全性\n已被破坏"];
+
+    normal -> transaction [label = "打开 REDIS_MULTI 选项"];
+
+    transaction -> dirty_cas [label = "打开 REDIS_DIRTY_CAS 选项"];
+}

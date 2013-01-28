@@ -1,12 +1,12 @@
-digraph enqueue_with_exec_and_discard {
+digraph not_enque_command {
 
     node [shape = record];
 
     command_in [label = "服务器接到来自客户端的命令"];
 
-    in_transaction_or_not [label = "客户端是否正处在事务状态？", shape = diamond];
+    in_transaction_or_not [label = "客户端是否正处于事务状态？", shape = diamond];
 
-    not_exec_and_discard [label = "命令是否 EXEC 或者 DISCARD ？", shape = diamond, color = red];
+    not_exec_and_discard [label = "命令是否\nEXEC 、 DISCARD 、\nMULTI 或 WATCH ？", shape = diamond, color = red];
 
     enqueu_command [label = "将命令放进事务队列里"];
 

@@ -4,7 +4,7 @@ digraph normal_to_transaction {
 
     label = "客户端状态的切换";
 
-    normal [label = "普通状态"];
+    normal [label = "非事务状态"];
 
     transaction [label = "事务状态"];
 

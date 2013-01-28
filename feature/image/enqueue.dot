@@ -4,7 +4,7 @@ digraph enqueue {
 
     command_in [label = "服务器接到来自客户端的命令"];
 
-    in_transaction_or_not [label = "客户端是否正处在事务状态？", shape = diamond];
+    in_transaction_or_not [label = "客户端是否正处于事务状态？", shape = diamond];
 
     enqueu_command [label = "将命令放进事务队列里"];
 
