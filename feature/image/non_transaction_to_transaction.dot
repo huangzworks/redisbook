@@ -8,5 +8,5 @@ digraph normal_to_transaction {
 
     transaction [label = "事务状态"];
 
-    normal -> transaction [label = "打开 REDIS_MULTI 选项"];
+    normal -> transaction [label = "打开选项\nREDIS_MULTI"];
 }

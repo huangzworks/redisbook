@@ -10,7 +10,7 @@ digraph dirty_cas {
 
     dirty_cas [label = "事务安全性\n已被破坏"];
 
-    normal -> transaction [label = "打开 REDIS_MULTI 选项"];
+    normal -> transaction [label = "打开选项\nREDIS_MULTI"];
 
-    transaction -> dirty_cas [label = "打开 REDIS_DIRTY_CAS 选项"];
+    transaction -> dirty_cas [label = "打开选项\nREDIS_DIRTY_CAS"];
 }

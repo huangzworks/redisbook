@@ -1,47 +1,53 @@
 事务
 ===============
 
-介绍两种事务： TBD
+Redis 通过 ``MULTI`` 、 ``DISCARD`` 、 ``EXEC`` 和 ``WATCH`` 几个命令来实现事务功能，
+本章首先讨论只使用 ``MULTI/DISCARD/EXEC`` 三个命令实现的一般事务，
+然后再来讨论带有 ``WATCH`` 的事务的实现。
+
+因为事务的安全性通常也是一个重要话题，所以本章最后以常见的 ACID 性质对 Redis 事务的安全性进行了说明。
 
 
 事务
 ---------------------------
 
-事务提供了一种“有序地执行多个命令”的机制，
-并且事务的执行不会被中断，服务器在执行完事务中的所有命令之后，才会继续处理其他客户端的其他命令。
+事务提供了一种“将多个命令打包，然后一次性、按顺序地执行”的机制，
+并且在事务执行的期间不会被中断，服务器在执行完事务中的所有命令之后，才会继续处理其他客户端的其他命令。
 
 以下是一个事务的例子，它将多个命令入队到事务中，然后由 ``EXEC`` 命令启动事务，一并执行事务中的所有命令：
 
 ::
 
-    redis 127.0.0.1:6379> MULTI
+    redis> MULTI
     OK
 
-    redis 127.0.0.1:6379> SET book-name "The Design and Implementation of Redis"
+    redis> SET book-name "The Design and Implementation of Redis"
     QUEUED
 
-    redis 127.0.0.1:6379> GET book-name
+    redis> GET book-name
     QUEUED
 
-    redis 127.0.0.1:6379> SADD animal panda
+    redis> SADD tag Redis Database NoSQL
     QUEUED
 
-    redis 127.0.0.1:6379> SADD animal bear
+    redis> SMEMBERS tag
     QUEUED
 
-    redis 127.0.0.1:6379> SMEMBERS animal
-    QUEUED
-
-    redis 127.0.0.1:6379> EXEC
+    redis> EXEC
     1) OK
     2) "The Design and Implementation of Redis"
-    3) (integer) 1
-    4) (integer) 1
-    5) 1) "bear"
-       2) "panda"
+    3) (integer) 3
+    4) 1) "Database"
+       2) "Redis"
+       3) "NoSQL"
 
-一个事务从开始到执行会经历“开始事务”、“命令入队”和“执行事务”三个阶段，
-下文就分别来介绍这三个阶段，以此了解 Redis 事务功能的工作机制。
+一个事务从开始到执行会经历以下三个阶段：
+
+1) 开始事务
+2) 命令入队
+3) 执行事务
+
+下文就分别来介绍这三个阶段，以此了解 Redis 事务功能的运作机制。
 
 
 开始事务
@@ -51,7 +57,7 @@
 
 ::
 
-    redis 127.0.0.1:6379> MULTI
+    redis> MULTI
     OK
 
 这个命令唯一做的就是，
@@ -69,10 +75,10 @@
 
 ::
 
-    redis 127.0.0.1:6379> SET msg "hello moto"
+    redis> SET msg "hello moto"
     OK
 
-    redis 127.0.0.1:6379> GET msg
+    redis> GET msg
     "hello moto"
 
 但是，
@@ -83,13 +89,13 @@
 
 ::
 
-    redis 127.0.0.1:6379> MULTI
+    redis> MULTI
     OK
 
-    redis 127.0.0.1:6379> SET msg "hello moto"
+    redis> SET msg "hello moto"
     QUEUED
 
-    redis 127.0.0.1:6379> GET msg
+    redis> GET msg
     QUEUED
 
 
@@ -115,7 +121,7 @@
     redis> SADD animal panda
     QUEUED
 
-    redis> LPUSH book-list Mastering C++ in 21 days
+    redis> LPUSH book-list "Mastering C++ in 21 days"
     QUEUED
 
     redis> LLEN book-list
@@ -144,7 +150,8 @@
 如果客户端正处于事务状态，
 那么当 ``EXEC`` 命令执行时，
 服务器根据客户端所保存的事务队列，
-以“先入队的命令先执行”的方式执行事务队列中的命令。
+以先进先出（FIFO）的方式执行事务队列中的命令：
+最先入队的命令最先执行，而最后入队的命令最后执行。
 
 比如说，对于以下事务数组：
 
@@ -230,16 +237,16 @@ Redis 的事务是不可嵌套的，
 
 ::
 
-    redis 127.0.0.1:6379> WATCH name
+    redis> WATCH name
     OK
 
-    redis 127.0.0.1:6379> MULTI
+    redis> MULTI
     OK
 
-    redis 127.0.0.1:6379> SET name peter
+    redis> SET name peter
     QUEUED
 
-    redis 127.0.0.1:6379> EXEC
+    redis> EXEC
     (nil)
 
 以下执行序列展示了上面的例子是如何失败的：
@@ -288,18 +295,19 @@ WATCH 命令的实现
 
 .. image:: image/new_watched_keys.png
 
-通过 ``watched_keys`` 字典，如果程序想检查某个键是否被监视，那么它只要检查哈希表中是否存在这个键即可；
+通过 ``watched_keys`` 字典，如果程序想检查某个键是否被监视，那么它只要检查字典中是否存在这个键即可；
 如果程序要获取监视某个键的所有客户端，那么只要取出键的值（一个链表），然后对链表进行遍历即可。
 
 WATCH 的触发
 --------------
 
-在任何对数据库的键进行修改的命令执行之后，
+在任何对数据库键空间（key space）进行修改的命令执行之后
+（比如 ``FLUSH`` 、 ``SET`` 、 ``DEL`` 、 ``LPUSH`` 、 ``SADD`` 、 ``ZREM`` ，诸如此类），
 ``multi.c/touchWatchKey`` 函数都会被调用：
 它检查数据库的 ``watched_keys`` 字典，
 看是否有客户端正在监视命令所处理的键，
 如果有的话，
-程序将所有监视这个/这些被修改键的客户端的 ``REDIS_DIRTY_CAS`` 状态打开：
+程序将所有监视这个/这些被修改键的客户端的 ``REDIS_DIRTY_CAS`` 选项打开：
 
 .. image:: image/dirty_cas.png
 
@@ -334,7 +342,9 @@ WATCH 的触发
 客户端的 ``REDIS_DIRTY_CAS`` 未打开，
 那么表示监视的所有键都没有被修改，
 服务器可以放心地执行事务。
-事务的执行方式，和前面介绍的不带 ``WATCH`` 命令的事务的执行方式一样。
+事务中命令的执行方式，和前面介绍的不带 ``WATCH`` 命令的事务的执行方式一样。
+
+最后，当一个客户端结束它的事务时，无论事务是成功执行，还是失败， ``watched_keys`` 字典中该客户端相关的资料都会被清除。
 
 
 事务的 ACID 性质
@@ -398,12 +408,28 @@ Redis 是单进程程序，并且它保证在执行事务时，不会对事务�
 持久性（Durability）
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-因为事务不过是用队列包裹起了一组 Redis 命令，并没有提供任何额外的持久性功能，所以事务的持久性由 Redis 所使用的持久化模式决定。
+因为事务不过是用队列包裹起了一组 Redis 命令，并没有提供任何额外的持久性功能，所以事务的持久性由 Redis 所使用的持久化模式决定：
 
-在单纯的内存模式下，事务肯定是不持久的。
+- 在单纯的内存模式下，事务肯定是不持久的。
 
-在 RDB 模式下，服务器可能在事务执行之后、RDB 文件更新之前的这段时间失败，所以 RDB 模式下的 Redis 事务也是不持久的。
+- 在 RDB 模式下，服务器可能在事务执行之后、RDB 文件更新之前的这段时间失败，所以 RDB 模式下的 Redis 事务也是不持久的。
 
-在 AOF 的“总是 SYNC ”模式下，事务在执行成功之后，会立即调用 ``fsync`` 或 ``fdatasync`` 将事务数据写入到 AOF 文件，但是这里也有一段非常小的间隔，所以这种模式下的事务也是不持久的。
+- 在 AOF 的“总是 SYNC ”模式下，事务的每条命令在执行成功之后，都会立即调用 ``fsync`` 或 ``fdatasync`` 将事务数据写入到 AOF 文件。但是，这种保存是由后台线程进行的，主线程不会阻塞直到保存成功，所以从命令执行成功到数据保存到硬盘之间，还是有一段非常小的间隔，所以这种模式下的事务也是不持久的。
 
-其他 AOF 模式也和“总是 SYNC ”模式类似，所以它们都是不持久的。
+  其他 AOF 模式也和“总是 SYNC ”模式类似，所以它们都是不持久的。
+
+
+小结
+--------
+
+- 事务提供了一种将多个命令打包，然后一次性、有序地执行的机制。
+
+- 事务在执行过程中不会被中断，所有事务命令执行完之后，事务才能结束。
+
+- 多个命令会被入队到事务队列中，然后按先进先出（FIFO）的顺序执行。
+
+- 带 ``WATCH`` 命令的事务会将客户端和被监视的键在数据库的 ``watched_keys`` 字典中进行关联，当键被修改时，程序会将所有监视被修改键的客户端的 ``REDIS_DIRTY_CAS`` 选项打开。
+
+- 只有在客户端的 ``REDIS_DIRTY_CAS`` 选项未被打开时，才能执行事务，否则事务直接返回失败。
+
+- Redis 的事务保证了 ACID 中的一致性（C）和隔离性（I），但并不保证原子性（A）和持久性（D）。
