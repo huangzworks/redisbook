@@ -1,0 +1,40 @@
+digraph new_subscribe {
+
+    rankdir = LR;
+
+    node [shape = record];
+
+    // keys
+
+    pubsub [label = "pubsub_channels |<channel1> channel1 |<channel2> channel2 |<channel3> channel3 | ... |<channelN> channelN"];
+
+    // clients blocking for channel1
+    client1 [label = "client1"];
+    client5 [label = "client5"];
+    client2 [label = "client2"];
+    client10086 [label = "client10086"];
+    client10086_1 [label = "client10086"];
+    client10086_2 [label = "client10086"];
+    
+    pubsub:channel1 -> client2;
+    client2 -> client5;
+    client5 -> client1;
+    client1 -> client10086;
+
+    // clients blocking for channel2
+    client7 [label = "client7"];
+
+    pubsub:channel2 -> client7;
+    client7 -> client10086_1;
+
+    // channel
+
+    client3 [label = "client3"];
+    client4 [label = "client4"];
+    client6 [label = "client6"];
+
+    pubsub:channel3 -> client3;
+    client3 -> client4;
+    client4 -> client6;
+    client6 -> client10086_2;
+}

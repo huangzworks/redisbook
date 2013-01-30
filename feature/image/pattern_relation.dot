@@ -1,0 +1,26 @@
+digraph pattern_relation {
+    
+    rankdir = BT;
+
+    kindle [label = "tweet.shop.kindle"];
+
+    ipad [label = "tweet.shop.ipad"];
+
+    node [shape = octagon];
+    pattern [label = "tweet.shop.*"];
+
+    pattern -> kindle [label = "match"];
+    pattern -> ipad [label = "match"];
+
+    node [shape = box];
+
+    client123 -> pattern [label = "subscribe"];
+    client256 -> pattern [label = "subscribe"];
+
+    clientX -> kindle [label = "subscribe"];
+    clientY -> kindle [label = "subscribe"];
+
+    client3333 -> ipad [label = "subscribe"];
+    client4444 -> ipad [label = "subscribe"];
+    client5555 -> ipad [label = "subscribe"];
+}

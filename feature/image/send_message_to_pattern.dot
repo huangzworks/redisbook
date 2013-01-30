@@ -1,0 +1,19 @@
+digraph send_message_to_pattern {
+   
+    node [shape = plaintext];
+    message [label = "PUBLISH tweet.shop.kindle message"];
+
+    kindle [label = "tweet.shop.kindle", shape = ellipse];
+    pattern [label = "tweet.shop.*", shape = octagon];
+
+    message -> kindle [style = dashed];
+    kindle -> pattern [style = dashed];
+
+    node [shape = box];
+    kindle -> clientX [style = dashed, label = "message"];
+    kindle -> clientY [style = dashed, label = "message"];
+
+    pattern -> client123 [style = dashed, label = "message"];
+    pattern -> client256 [style = dashed, label = "message"];
+
+}

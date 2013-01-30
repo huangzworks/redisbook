@@ -1,0 +1,24 @@
+digraph send_message_to_subscriber {
+    
+    message [label = "PUBLISH channel1 message", shape = plaintext];
+
+    message -> channel1 [style = dashed];
+
+    channel1 [label = "channel1"];
+
+    node [shape = box];
+
+    client2 [label = "client2"];
+    client5 [label = "client5"];
+    client1 [label = "client1"];
+
+    /*
+    client2 -> channel1 [label = "subscribe"];
+    client5 -> channel1 [label = "subscribe"];
+    client1 -> channel1 [label = "subscribe"];
+    */
+
+    channel1 -> client2 [label = "message", style = dashed];
+    channel1 -> client5 [label = "message", style = dashed];
+    channel1 -> client1 [label = "message", style = dashed];
+}
