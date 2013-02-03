@@ -1,0 +1,24 @@
+digraph expires {
+
+    rankdir = LR;
+
+    node [shape = record];
+
+    redisDb [label = "redisDb | id | ... |<expires> expires | ..."];
+
+    // expires
+
+    expires [label = "<head>dict |<number>StringObject\n \"number\" | NULL |<book>StringObject\n \"book\" | NULL "];
+
+    expire_of_number [label = "<head>StringObject | 1360454400000 "];
+
+    expire_of_book [label = "<head>StringObject | 1360800000000 "];
+
+    // expires edge
+
+    redisDb:expires -> expires:head;
+
+    expires:number -> expire_of_number:head;
+    expires:book -> expire_of_book:head;
+
+}

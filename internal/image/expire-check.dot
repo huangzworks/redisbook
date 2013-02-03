@@ -1,0 +1,17 @@
+digraph expire_check {
+    
+    write_commands [label = "SET 、 LPUSH 、 SADD 。。。", shape = "plaintext"];
+
+    read_commands [label = "GET 、 LRANGE 、 SMEMBERS 。。。", shape = "plaintext"];
+
+    expire_if_needed [label = "调用 expire_if_needed() \n 删除过期键", shape = box];
+
+    process [label = "执行实际的命令流程"];
+
+    write_commands -> expire_if_needed [label = "写请求"];
+
+    read_commands -> expire_if_needed [label = "读请求"];
+
+    expire_if_needed -> process;
+
+}

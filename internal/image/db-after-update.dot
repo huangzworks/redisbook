@@ -1,0 +1,30 @@
+digraph db {
+
+    rankdir = LR;
+
+    node [shape = record];
+
+    redisDb [label = "redisDb | id |<dict> dict | ..."];
+
+    dict [label = "<head>dict\n(key space) |<number>StringObject\n \"number\" | NULL |<book>StringObject\n \"book\" |<message>StringObject\n \"message\""];
+
+    number [label = "<head>ListObject | { 123 | 456 | 789 }"];
+
+    book [label = "<head>HashObject |<name>StringObject\n \"name\" |<author>StringObject\n \"author\" |<publisher>StringObject\n \"publisher\""];
+
+    book_name [label = "<head>StringObject | \"Mastering C++ in 21 days\""];
+    book_author [label = "<head>StringObject | \"Someone\""];
+    book_publisher [label = "<head>StringObject | \"Oh-Really? Publisher\""];
+
+    message [label = "<head>StringObject | \"blah blah\""];
+
+    redisDb:dict -> dict:head;
+
+    dict:number -> number:head;
+    dict:book -> book:head;
+    dict:message -> message:head;
+
+    book:name -> book_name:head;
+    book:author -> book_author:head;
+    book:publisher -> book_publisher:head;
+}

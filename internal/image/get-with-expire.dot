@@ -1,0 +1,16 @@
+digraph get_with_expire {
+   
+    get [label = "GET key", shape = "plaintext"];
+
+    expire_if_needed [label = "调用 expire_if_needed() \n 如果键已经过期 \n 那么将它删除", shape = box];
+
+    expired_and_deleted [label = "key 不存在\n 向客户端返回 NIL"];
+
+    not_expired [label = "向客户端返回 key 的值"];
+
+    get -> expire_if_needed;
+
+    expire_if_needed -> expired_and_deleted [label = "已过期"];
+    expire_if_needed -> not_expired [label = "未过期"];
+
+}
