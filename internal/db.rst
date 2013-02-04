@@ -22,7 +22,7 @@ Redis 中的每个数据库，都由一个 ``redisDb`` 来表示：
         // 这个属性也被称为键空间（key space）
         dict *dict;
 
-        // # 保存着键的过期信息
+        // 保存着键的过期信息
         dict *expires;
 
         // 实现列表阻塞原语，如 BLPOP 
