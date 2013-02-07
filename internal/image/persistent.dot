@@ -1,11 +1,12 @@
 digraph persistent {
+
     rankdir = LR;
 
-    memory_object [label = "内存中的数据对象"];
+    redis_object [label = "内存中的数据对象"];
 
-    byte_in_file [label = "文件中的字节串"];
+    rdb [label = "磁盘中的RDB文件"];
 
-    memory_object -> byte_in_file [label = "rdbSave\n持久化"];
+    redis_object -> rdb [label = "rdbSave"];
 
-    byte_in_file -> memory_object [label = "rdbLoad\n载入"];
+    rdb -> redis_object [label = "rdbLoad"];
 }
