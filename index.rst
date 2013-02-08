@@ -76,7 +76,7 @@ Redis 设计与实现
    internal/ae
    internal/networking
    internal/db
-   internal/persistent
+   internal/rdb
    internal/aof
 
 第六部分：高可用性、容错与集群
