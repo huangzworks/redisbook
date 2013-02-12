@@ -1,0 +1,32 @@
+digraph propagate {
+
+    // node 
+
+    exec [label = "命令执行成功", shape = box];
+
+    aof_choice [label = "AOF\n 功能已打开？", shape = diamond];
+
+    propagate_aof [label = "传播命令到 AOF 程序", shape = box];
+
+    replication_choice [label = "REPLICATION\n 功能已打开？", shape = diamond];
+
+    propagate_replication [label = "传播命令到 REPLICATION 程序", shape = box];
+
+    remaind_jobs [label = "处理后续步骤：\n清理资源、\n等等", shape = box];
+
+    // edge
+
+    exec -> aof_choice;
+
+    aof_choice -> propagate_aof [label = "是"];
+
+    propagate_aof -> replication_choice;
+
+    aof_choice -> replication_choice [label = "否"];
+
+    replication_choice -> remaind_jobs [label = "否"];
+
+    replication_choice -> propagate_replication [label = "是"];
+
+    propagate_replication -> remaind_jobs;
+}
