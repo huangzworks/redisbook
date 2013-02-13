@@ -447,217 +447,160 @@ AOF 重写并不需要对原有的 AOF 文件进行任何写入和读取，
 
 .. code-block:: python
 
-    def AOF_REWRITE(tmp_tile_name):
+  def AOF_REWRITE(tmp_tile_name):
 
-        f = create(tmp_tile_name)
+    f = create(tmp_tile_name)
 
-        # 遍历所有数据库
-        for db in redisServer.db:
+    # 遍历所有数据库
+    for db in redisServer.db:
 
-            # 如果数据库为空，那么跳过这个数据库
-            if db.is_empty(): continue
+      # 如果数据库为空，那么跳过这个数据库
+      if db.is_empty(): continue
 
-            # 写入 SELECT 命令，用于切换数据库
-            f.write("SELECT " + db.number)
+      # 写入 SELECT 命令，用于切换数据库
+      f.write_command("SELECT " + db.number)
 
-            # 遍历所有键
-            for key in db:
-                
-                # 如果键带有过期时间，并且已经过期，那么跳过这个键
-                if key.have_expire_time() and key.is_expired(): continue
+      # 遍历所有键
+      for key in db:
+              
+        # 如果键带有过期时间，并且已经过期，那么跳过这个键
+        if key.have_expire_time() and key.is_expired(): continue
 
-                if key.type == String:
+        if key.type == String:
 
-                    # 用 SET key value 命令来保存字符串键
+          # 用 SET key value 命令来保存字符串键
 
-                    value = get_value_from_string(key)
+          value = get_value_from_string(key)
 
-                    f.write("SET " + key + value)
+          f.write_command("SET " + key + value)
 
-                elif key.type == List:
+        elif key.type == List:
 
-                    # 用 RPUSH key item1 item2 ... itemN 命令来保存列表键
+          # 用 RPUSH key item1 item2 ... itemN 命令来保存列表键
 
-                    item1, item2, ..., itemN = get_item_from_list(key)
-                    
-                    f.write("RPUSH " + key + item1 + item2 + ... + itemN)
+          item1, item2, ..., itemN = get_item_from_list(key)
+                  
+          f.write_command("RPUSH " + key + item1 + item2 + ... + itemN)
 
-                elif key.type == Set:
+        elif key.type == Set:
 
-                    # 用 SADD key member1 member2 ... memberN 命令来保存集合键
-                    
-                    member1, member2, ..., memberN = get_member_from_set(key)
+          # 用 SADD key member1 member2 ... memberN 命令来保存集合键
+                  
+          member1, member2, ..., memberN = get_member_from_set(key)
 
-                    f.write("SADD " + key + member1 + member2 + ... + memberN)
+          f.write_command("SADD " + key + member1 + member2 + ... + memberN)
 
-                elif key.type == Hash:
+        elif key.type == Hash:
 
-                    # 用 HMSET key field1 value1 field2 value2 ... fieldN valueN 
-                    # 命令来保存哈希键
+          # 用 HMSET key field1 value1 field2 value2 ... fieldN valueN 命令来保存哈希键
 
-                    field1, value1, field2, value2, ..., fieldN, valueN = get_field_and_value_from_hash(key)
+          field1, value1, field2, value2, ..., fieldN, valueN = get_field_and_value_from_hash(key)
 
-                    f.write("HMSET " + key + field1 + value1 + field2 + value2 + ... + fieldN + valueN)
+          f.write_command("HMSET " + key + field1 + value1 + field2 + value2 + ... + fieldN + valueN)
 
-                elif key.type == SortedSet:
+        elif key.type == SortedSet:
 
-                    # 用 ZADD key score1 member1 score2 member2 ... scoreN memberN
-                    # 命令来保存有序集键
+          # 用 ZADD key score1 member1 score2 member2 ... scoreN memberN 命令来保存有序集键
 
-                    score1, member1, score2, member2, ..., scoreN, memberN = \
-                    get_score_and_member_from_sorted_set(key)
+          score1, member1, score2, member2, ..., scoreN, memberN = \ 
+          get_score_and_member_from_sorted_set(key)
 
-                    f.write("ZADD " + key + score1 + member1 + score2 + member2 + ... + scoreN + memberN)
-                
-                else:
+          f.write_command("ZADD " + key + score1 + member1 + score2 + member2 + ... + scoreN + memberN)
+              
+        else:
 
-                    raise_type_error()
-               
-                # 如果键带有过期时间，那么用 EXPIREAT key time 命令来保存键的过期时间
-                if key.have_expire_time():
-                    f.write("EXPIREAT " + key + key.expire_time_in_unix_timestamp())
+          raise_type_error()
+             
+        # 如果键带有过期时间，那么用 EXPIREAT key time 命令来保存键的过期时间
+        if key.have_expire_time():
+          f.write_command("EXPIREAT " + key + key.expire_time_in_unix_timestamp())
 
-        # 关闭文件
-        f.close()
+      # 关闭文件
+      f.close()
 
 
 AOF 后台重写
 ---------------
 
-后台重写的原因：
+上一节展示的 AOF 重写程序可以很好地完成创建一个新 AOF 文件的任务，
+但是在执行这个程序的时候，
+调用者线程会被阻塞。
 
-- 不能阻塞主进程
+很明显，
+作为一种辅佐性的优化手段，
+Redis 不希望 AOF 重写造成服务器无法处理请求，
+所以 Redis 决定将 AOF 重写程序放到（后台）子进程里执行，
+这样处理的最大好处是：
 
-- 两个线程同时修改的话，数据不一致
+1. 子进程进行 AOF 重写期间，主进程可以继续处理命令请求。
 
-- 通过 fork ，可以很方便地获得当前数据的 snapshot
+2. 子进程带有主进程的数据副本，使用子进程而不是线程，可以在避免锁的情况下，保证数据的安全性。
 
-- 但是， fork 也会让主进程接收到的数据无法同步到子线程
+不过，
+使用子进程也有一个问题需要解决：
+因为子进程在进行 AOF 重写期间，
+主进程还需要继续处理命令，
+而新的命令可能对现有的数据进行修改，
+这会让当前数据库的数据和重写后的 AOF 文件中的数据不一致。
 
-- 所以，主进程必须在子进程进行 AOF 重写起见，用一个缓存，将 AOF 重写期间的所有命令缓存进去
+为了解决这个问题，
+Redis 增加了一个 AOF 重写缓存，
+这个缓存在 fork 出子进程之后开始启用，
+Redis 主进程在接到新的写命令之后，
+除了会将这个写命令的协议内容追加到现有的 AOF 文件之外，
+还会追加到这个缓存中：
 
-- 子进程重写完毕之后，向主进程发送信号
+.. image:: image/propagate_when_rewrite.png
 
-- 主进程打开新的 AOF 文件，将命令缓存追加进去，然后将新的 AOF 文件改名，覆盖原有的旧 AOF 文件。
+换言之，
+当子进程在执行 AOF 重写时，
+主进程需要执行以下三个工作：
 
-- 至此，AOF 重写完成
-                    
+1. 处理命令请求。
 
-AOF 写入是如何进行的？
------------------------
+2. 将写命令追加到现有的 AOF 文件中。
 
-三个阶段： 1）命令执行 2）缓存追加 3）文件写入
+3. 将写命令追加到 AOF 重写缓存中。
 
-命令进入
-^^^^^^^^^^
+这样一来可以保证：
 
-服务器像平常一样执行客户端送来的命令，
-命令在执行之后都会检查服务器是否处于 AOF 模式，
-如果是的话，
-它们就会将命令和命令的参数传播到 AOF 文件，
-这会引起以下两步的执行。
+1. 现有的 AOF 功能会继续执行，即使在 AOF 重写期间发生停机，也不会有任何数据丢失。
 
-缓存追加
-^^^^^^^^^^^
+2. 所有对数据库进行修改的命令都会被记录到 AOF 重写缓存中。
 
-两个 buf 。
+当子进程完成 AOF 重写之后，
+它会向父进程发送一个完成信号，
+父进程在接到完成信号之后，
+会调用一个信号处理函数，
+并完成以下工作：
 
-每当有命令进入时，
-将输入的命令从对象形式（\ ``redisObject``\ ）转换回字符串形式（Redis 协议），
-然后将字符串追加到 ``server.aof_buf`` 的末尾，
-下次执行 ``flushAppendOnlyFile`` 时，
-就会将缓存写入到文件。
+1. 将 AOF 重写缓存中的内容全部写入到新 AOF 文件中。
 
-如果当时还在进行 AOF 文件重写，
-那么将字符串形式的命令也添加到 AOF 文件重写缓存中，
-这样无论是当前正在使用的 AOF 文件（老 AOF 文件）
-还是正在重写的 AOF （新 AOF 文件），
-它们的数据都是相同的、同步的。
+2. 对新的 AOF 文件进行改名，覆盖原有的 AOF 文件。
 
-文件写入 
-^^^^^^^^^^
+当步骤 1 执行完毕之后，
+现有 AOF 文件、新 AOF 文件和数据库三者的状态就完全一致了。
 
-``flushAppendOnlyFile`` 函数：
+当步骤 2 执行完毕之后，
+程序就用体积更小的新 AOF 文件替换了原有的大体积的 AOF 文件。
 
-1. 将 AOF 缓存用 write 写入 aof 文件
+这个信号处理函数执行完毕之后，
+主进程就可以继续像往常一样接受命令请求了。
+在整个 AOF 后台重写过程中，
+只有最后的写入缓存和改名操作会造成主进程阻塞，
+在其他时候，
+AOF 后台重写都不会对主进程造成阻塞，
+这将 AOF 重写对性能造成的影响降到了最低。
 
-2. 如果 AOF 模式是 ``AOF_FSYNC_ALWAYS`` （总是执行 ``fsync`` ），那么调用 fsync （会阻塞 Redis 主进程）；如果 AOF 模式为 ``AOF_FSYNC_EVERYSEC`` （每秒 ``fsync`` 一次），并且后台任务队列中没有 ``fsync`` 在等待，那么将 ``fsync`` 命令放到后台执行（不阻塞主进程）。
+以上就是 AOF 后台重写，
+也即是 ``BGREWRITEAOF`` 命令的工作原理。
 
-.. tip:: 
-    每秒执行一次 ``fsync`` 可以在尽可能保证安全性的前提下，最大化性能。
-    总是执行 ``fsync`` 模式会造成 Redis 主进程阻塞，降低性能。
-
-
-AOF 读取是如何进行的？
---------------------------
-
-AOF 文件里的内容全都是 Redis 协议，
-读入程序创建一个 Redis 伪终端，
-然后将 AOF 文件里的协议传给伪终端，
-服务器执行伪终端传给它的命令（就像平时执行用户的命令一样），
-从而重建 AOF 文件所保存的数据库。
-
-在读入 AOF 文件期间，
-服务器还会间隔性地处理外部客户端的请求，
-因此 AOF 文件的命令和外部客户端的命令可能互相覆盖。
-所以在服务器读取 AOF 文件时，
-最好不要连接客户端，
-以免影响 AOF 文件的还原效果。
-
-
-AOF 重写是如何进行的？
------------------------------
-
-遍历所有数据库，
-遍历所有键-值对，
-将这些键-值对的当前状态通过 Redis 协议的形式写入到一个指定名字的临时文件里。
-
-例子，一个列表 key 里有三个元素 ``1`` 、 ``3`` , ``9`` ，
-它们以 ``RPUSH key 1`` 、 ``RPUSH key 3`` 和 ``RPUSH key 9`` 三个命令执行而成，
-那么将协议内容 ``RPUSH key 1 3 9`` 写入到 AOF 文件，
-这样重写后的 AOF 文件在不修改 ``key`` 的值的前提下，
-节约了三倍的空间。
-
-.. warning::
-
-    TODO 整合协议内容，更详细地描述重建过程。
-
-写入过程会阻塞主进程。
-
-.. note::
-
-    这个过程只会被 ``BGREWRITEAOF`` 调用，
-    Redis 不会直接调用这个阻塞进程。
-
-
-AOF 后台重写是如何进行的？
------------------------------
-
-主进程 fork 出一个子进程，
-子进程创建一个临时文件，并执行上一节描述的 AOF 重写动作，
-而主进程则继续接受请求，
-并将请求追加到一个字符串缓存里。
-
-子进程完成之后给主进程发送一个信号，
-告知重写已完成。
-
-Redis 在每次执行 serverCorn 的时候都会检查一次是否有信号到达（非阻塞 ``wait3`` ），
-如果服务器状态表示正处于后台重写状态，
-并且接到子进程的重写已完成信号，
-那么主进程将 AOF 重写进行以来的所有新命令缓存追加到重写后的 AOF 文件里，
-这就完成了所有新旧数据的同步，
-然后，
-主进程将临时文件改名，
-代替旧的 AOF 文件，
-至此，
-AOF 后台重写执行完毕。
-
-整个重写过程由子进程进行，
-除了将缓存写入到新 AOF 文件的那段时间之外（为了保证安全性，这段时间的阻塞是必须的），
-主进程都不会被阻塞。
-
-
-AOF 保存和 RDB 保存的好处和坏处对比
---------------------------------------
-
-TODO
+..  后台重写的原因：
+    - 不能阻塞主进程
+    - 两个线程同时修改的话，数据不一致
+    - 通过 fork ，可以很方便地获得当前数据的 snapshot
+    - 但是， fork 也会让主进程接收到的数据无法同步到子线程
+    - 所以，主进程必须在子进程进行 AOF 重写起见，用一个缓存，将 AOF 重写期间的所有命令缓存进去
+    - 子进程重写完毕之后，向主进程发送信号
+    - 主进程打开新的 AOF 文件，将命令缓存追加进去，然后将新的 AOF 文件改名，覆盖原有的旧 AOF 文件。
+    - 至此，AOF 重写完成

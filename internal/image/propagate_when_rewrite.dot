@@ -1,0 +1,16 @@
+digraph p {
+
+    client [label = "客户端"];
+
+    server [label = "服务器"];
+
+    client -> server [label = "命令请求"];
+
+    current_aof [label = "现有 AOF 文件", shape = record];
+
+    aof_rewrite_buf [label = "AOF 重写缓存", shape = record];
+
+    server -> current_aof [label = "命令协议内容"];
+
+    server -> aof_rewrite_buf [label = "命令协议内容"];
+}
