@@ -187,7 +187,6 @@ AOF 在“每一秒钟保存一次”时发生故障，
 只丢失 1 秒钟数据的说法，
 实际上并不准确。
 
-
 每执行一个命令保存一次
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -290,7 +289,7 @@ AOF 文件所保存的数据库就会被完整地还原出来。
 
         # 打开并读取 AOF 文件
         file = open(aof_file_name)
-        while file.is_not_empty():
+        while file.is_not_reach_eof():
 
             # 读入一条协议文本格式的 Redis 命令
             cmd_in_text = file.read_next_command_in_protocol_format()
@@ -300,6 +299,9 @@ AOF 文件所保存的数据库就会被完整地还原出来。
 
             # 执行命令
             execRedisCommand(cmd, argv, argc)
+
+        # 关闭文件
+        file.close()
 
 作为例子，
 以下是一个简短的 AOF 文件的内容：
@@ -343,6 +345,203 @@ AOF 文件所保存的数据库就会被完整地还原出来。
 
 然后执行后面的 ``SET key value`` 和 ``RPUSH 1 2 3 4`` 命令，
 还原 ``key`` 和 ``list`` 两个键的数据。
+
+
+AOF 重写
+-------------
+
+AOF 文件通过同步 Redis 服务器所执行的命令，
+从而实现了数据库状态的记录，
+但是，
+这种同步方式会造成一个问题：
+随着运行时间的流逝，
+AOF 文件会变得越来越大。
+
+举个例子，
+如果服务器执行了以下命令：
+
+::
+
+    RPUSH list 1 2 3 4      // [1, 2, 3, 4]
+
+    RPOP list               // [1, 2, 3]
+
+    LPOP list               // [2, 3]
+
+    LPUSH list 1            // [1, 2, 3]
+
+那么为了记录 ``list`` 键的状态，
+AOF 文件里就会保存这 ``4`` 条命令的协议。
+
+另一方面，
+有些被频繁操作的键，
+对它们所调用的命令可能有成百上千、甚至上万条，
+如果这样被频繁操作的键有很多的话，
+AOF 文件的体积就会急速膨胀，
+对 Redis 、甚至整个系统的造成影响。
+
+为了解决以上的问题，
+Redis 需要对 AOF 文件进行重写（rewrite）：
+创建一个新的 AOF 文件来代替原有的 AOF 文件，
+新 AOF 文件和原有 AOF 文件保存的数据库状态完全一样，
+但新 AOF 文件的体积小于等于原有 AOF 文件的体积。
+
+以下就来介绍 AOF 重写的实现方式。
+
+
+AOF 重写的实现
+-------------------
+
+所谓的“重写”其实是一个有歧义的词语，
+实际上，
+AOF 重写并不需要对原有的 AOF 文件进行任何写入和读取，
+它针对的是数据库中键的当前值。
+
+考虑这样一个情况，
+如果服务器对键 ``list`` 执行了以下四条命令：
+
+::
+
+    RPUSH list 1 2 3 4      // [1, 2, 3, 4]
+
+    RPOP list               // [1, 2, 3]
+
+    LPOP list               // [2, 3]
+
+    LPUSH list 1            // [1, 2, 3]
+
+那么当前列表键 ``list`` 在数据库中的值就为 ``1`` 、 ``2`` 、 ``3`` 。
+
+如果我们要保存这个列表的当前状态，
+并且尽量减少所使用的命令数，
+那么最简单的方式不是去 AOF 文件上分析前面执行的四条命令，
+而是直接读取 ``list`` 键在数据库的当前值，
+然后用一条 ``RPUSH 1 2 3`` 命令来代替前面的四条命令。
+
+再考虑这样一个例子，
+如果服务器对集合键 ``animal`` 执行了以下命令：
+
+::
+
+    SADD animal cat                 // {cat}
+
+    SADD animal dog panda tiger     // {cat, dog, panda, tiger}
+
+    SREM animal cat                 // {dog, panda, tiger}
+
+    SADD animal cat lion            // {cat, lion, dog, panda, tiger}
+
+那么使用一条 ``SADD animal cat lion dog panda tiger`` 命令，
+就可以还原 ``animal`` 集合的状态，
+这比之前的四条命令调用要大大减少。
+
+除了列表和集合之外，
+字符串、有序集、哈希表等键也可以用类似的方法来保存状态，
+并且保存这些状态所使用的命令数量，
+比起之间建立这些键的状态所使用命令的数量要大大减少。
+
+根据键的类型，
+使用适当的插入命令来重构键的当前值，
+这就是 AOF 重写的实现原理。
+整个重写过程可以用伪代码表示如下：
+
+.. code-block:: python
+
+    def AOF_REWRITE(tmp_tile_name):
+
+        f = create(tmp_tile_name)
+
+        # 遍历所有数据库
+        for db in redisServer.db:
+
+            # 如果数据库为空，那么跳过这个数据库
+            if db.is_empty(): continue
+
+            # 写入 SELECT 命令，用于切换数据库
+            f.write("SELECT " + db.number)
+
+            # 遍历所有键
+            for key in db:
+                
+                # 如果键带有过期时间，并且已经过期，那么跳过这个键
+                if key.have_expire_time() and key.is_expired(): continue
+
+                if key.type == String:
+
+                    # 用 SET key value 命令来保存字符串键
+
+                    value = get_value_from_string(key)
+
+                    f.write("SET " + key + value)
+
+                elif key.type == List:
+
+                    # 用 RPUSH key item1 item2 ... itemN 命令来保存列表键
+
+                    item1, item2, ..., itemN = get_item_from_list(key)
+                    
+                    f.write("RPUSH " + key + item1 + item2 + ... + itemN)
+
+                elif key.type == Set:
+
+                    # 用 SADD key member1 member2 ... memberN 命令来保存集合键
+                    
+                    member1, member2, ..., memberN = get_member_from_set(key)
+
+                    f.write("SADD " + key + member1 + member2 + ... + memberN)
+
+                elif key.type == Hash:
+
+                    # 用 HMSET key field1 value1 field2 value2 ... fieldN valueN 
+                    # 命令来保存哈希键
+
+                    field1, value1, field2, value2, ..., fieldN, valueN = get_field_and_value_from_hash(key)
+
+                    f.write("HMSET " + key + field1 + value1 + field2 + value2 + ... + fieldN + valueN)
+
+                elif key.type == SortedSet:
+
+                    # 用 ZADD key score1 member1 score2 member2 ... scoreN memberN
+                    # 命令来保存有序集键
+
+                    score1, member1, score2, member2, ..., scoreN, memberN = \
+                    get_score_and_member_from_sorted_set(key)
+
+                    f.write("ZADD " + key + score1 + member1 + score2 + member2 + ... + scoreN + memberN)
+                
+                else:
+
+                    raise_type_error()
+               
+                # 如果键带有过期时间，那么用 EXPIREAT key time 命令来保存键的过期时间
+                if key.have_expire_time():
+                    f.write("EXPIREAT " + key + key.expire_time_in_unix_timestamp())
+
+        # 关闭文件
+        f.close()
+
+
+AOF 后台重写
+---------------
+
+后台重写的原因：
+
+- 不能阻塞主进程
+
+- 两个线程同时修改的话，数据不一致
+
+- 通过 fork ，可以很方便地获得当前数据的 snapshot
+
+- 但是， fork 也会让主进程接收到的数据无法同步到子线程
+
+- 所以，主进程必须在子进程进行 AOF 重写起见，用一个缓存，将 AOF 重写期间的所有命令缓存进去
+
+- 子进程重写完毕之后，向主进程发送信号
+
+- 主进程打开新的 AOF 文件，将命令缓存追加进去，然后将新的 AOF 文件改名，覆盖原有的旧 AOF 文件。
+
+- 至此，AOF 重写完成
+                    
 
 AOF 写入是如何进行的？
 -----------------------
