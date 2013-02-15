@@ -507,7 +507,7 @@ Redis 惰性删除的核心是 ``db.c/expireIfNeeded`` 函数 ——
                 if is_expired(key_with_ttl):
                     db.deleteExpiredKey(key_with_ttl)
         
-                # 当执行时间到达上线，函数就返回，不再继续
+                # 当执行时间到达上限，函数就返回，不再继续
                 # 这确保删除操作不会占用太多的 CPU 时间
                 if reach_time_limit(): return
 
