@@ -1,0 +1,21 @@
+digraph return_result_to_client {
+
+    rankdir = BT;
+
+    executor [label = "命令执行器", shape = circle];
+
+    file_event_handler [label = "文件事件处理器", shape = record];
+
+    client_x [label = "客户端 X"];
+
+    client_y [label = "客户端 Y"];
+
+    client_z [label = "客户端 Z"];
+
+    client_x -> file_event_handler [dir = back, label = "返回命令结果\n（写事件已就绪）"];
+    client_y -> file_event_handler [dir = none, style = dashed, label = "等待命令进入\n（等待读事件）"];
+    client_z -> file_event_handler [dir = back, label = "返回命令结果\n（写事件已就绪）"];
+
+    file_event_handler -> executor [dir = none, style = dashed, label = "等待命令进入"];
+
+}

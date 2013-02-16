@@ -1,0 +1,21 @@
+digraph pending {
+
+    rankdir = BT;
+
+    executor [label = "命令执行器", shape = circle];
+
+    file_event_handler [label = "文件事件处理器", shape = record];
+
+    client_123 [label = "客户端 X"];
+
+    client_456 [label = "客户端 Y"];
+
+    client_10086 [label = "客户端 Z"];
+
+    client_123 -> file_event_handler [dir = none, style = dashed, label = "等待命令进入\n（等待读事件）"];
+    client_456 -> file_event_handler [dir = none, style = dashed, label = "等待命令进入\n（等待读事件）"];
+    client_10086 -> file_event_handler [dir = none, style = dashed, label = "等待命令进入\n（等待读事件）"];
+
+    file_event_handler -> executor [dir = none, style = dashed, label = "等待命令进入"];
+
+}
