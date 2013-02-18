@@ -1,0 +1,16 @@
+digraph e 
+{
+    rankdir = BT;
+
+    server [label = "服务器", shape=square];
+
+    cx [label = "客户端 X"];
+
+    cy [label = "客户端 Y"];
+
+    cz [label = "客户端 Z"];
+
+    cx -> server [dir=back, style=dashed, label="返回命令执行结果\n等待命令请求"];
+    cy -> server [dir=none, style=dotted, label="等待命令请求"];
+    cz -> server [dir=none, style=dotted, label="等待命令请求"];
+}
