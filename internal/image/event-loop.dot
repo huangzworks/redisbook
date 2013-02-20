@@ -1,6 +1,0 @@
-digraph e {
-
-    event_state [label = "事件状态", shape = circle];
-
-    event_state -> event_state [label = "loop"];
-}
