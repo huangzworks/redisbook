@@ -58,12 +58,13 @@ Redis 设计与实现
 .. toctree::
    :maxdepth: 2
 
-   feature/bitop
    feature/transaction
    feature/pubsub
    feature/scripting
    feature/slowlog
-   feature/sort
+
+..   feature/bitop
+..   feature/sort
 
 
 第五步分：内部运作机制
@@ -72,22 +73,21 @@ Redis 设计与实现
 .. toctree::
    :maxdepth: 2
 
-   internal/redis
-   internal/ae
-   internal/networking
    internal/db
    internal/rdb
    internal/aof
+   internal/ae
+   internal/redis
 
-第六部分：高可用性、容错与集群
------------------------------------------------------------------
+..   internal/networking
 
-.. toctree::
-   :maxdepth: 2
-
-   part-six/replication
-   part-six/sentinel
-   part-six/cluster
+.. 第六部分：高可用性、容错与集群
+   -----------------------------------------------------------------
+   .. toctree::
+      :maxdepth: 2
+      part-six/replication
+      part-six/sentinel
+      part-six/cluster
 
 
 附录
