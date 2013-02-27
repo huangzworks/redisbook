@@ -121,24 +121,3 @@ SKIPLIST 编码
 - 范围性查找和处理操作，这是（高效地）实现 ``ZRANGE`` 、 ``ZRANK`` 和 ``ZINTERSTORE`` 等命令的关键。
 
 以上两点，如果只使用字典结构的话，是很难高效地实现的。
-
-
-TODO ZUNIONSTORE 算法
------------------------
-
-UNION 部分可以用 memorize 来提速？！！
-
-TODO
-
-
-TODO ZINTERSTORE 算法
-------------------------
-
-TODO
-
-
-TODO 彩蛋
------------
-
-ZUNIONSTORE 和 ZINTERSTORE 命令的输入 key 可以是集合！
-
