@@ -138,10 +138,9 @@ sds 的实现
 
 ::
 
-    // sds 类型                                                            
     typedef char *sds;                                                     
 
-    // sdshdr 结构                                                         
+
     struct sdshdr {                                                        
 
         // buf 已占用长度
