@@ -143,10 +143,13 @@ sds 的实现
 
     // sdshdr 结构                                                         
     struct sdshdr {                                                        
-        int len;        // buf 已占用长度                                  
-        int free;       // buf 可用长度                                    
-        char buf[];     // 实际保存字符串的地方
-    };    
+        // buf 已占用长度
+        int len;                                  
+        // buf 剩余可用长度
+        int free;                                    
+        // 实际保存字符串数据的地方
+        char buf[];
+    };
 
 
 其中，类型 ``sds`` 是 ``char *`` 的别名(alias)，而结构 ``sdshdr`` 则保存了 ``len`` 、 ``free`` 和 ``buf`` 三个属性。
