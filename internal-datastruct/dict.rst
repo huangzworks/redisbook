@@ -428,9 +428,9 @@ Redis 目前使用两种不同的哈希算法：
 对于 ``ht[0]`` 的 ``size`` 和 ``used`` 属性，
 如果它们之间的比率 ``ratio = used / size`` 满足以下任何一个条件的话，rehash 过程就会被激活：
 
-1. 自然 rehash ： ``ratio >= 1`` ，且全局变量 ``dict_can_resize`` 为真。
+1. 自然 rehash ： ``ratio >= 1`` ，且变量 ``dict_can_resize`` 为真。
 
-2. 强制 rehash ： ``ratio`` 大于全局变量 ``dict_force_resize_ratio`` （目前版本中， ``dict_force_resize_ratio`` 的值为 ``5`` ）。
+2. 强制 rehash ： ``ratio`` 大于变量 ``dict_force_resize_ratio`` （目前版本中， ``dict_force_resize_ratio`` 的值为 ``5`` ）。
 
 .. note:: 什么时候 ``dict_can_resize`` 会为假？
 
