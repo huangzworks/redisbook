@@ -15,9 +15,9 @@ digraph zset {
     six:3 -> fiften:3;
     ten:1 -> fiften:1;
 
-    null_1 [label = "NULL"];
-    null_2 [label = "NULL"];
-    null_3 [label = "NULL"];
+    null_1 [label = "NULL", shape=plaintext];
+    null_2 [label = "NULL", shape=plaintext];
+    null_3 [label = "NULL", shape=plaintext];
 
     fiften:1 -> null_1;
     fiften:2 -> null_2;
