@@ -627,7 +627,7 @@ dictRehashMilliseconds
 对于不同的字典，
 Redis 使用不同的收缩和扩展策略：
 
-- 数据库字典可以扩展也可以收缩，具体信息请参考《\ :ref:`db_chapter`\ 》的《\ :ref:`db_expand_and_shrink`\ 》小节；
+- 数据库字典可以扩展也可以收缩，具体信息请参考《\ :ref:`db_chapter`\ 》一章的《\ :ref:`db_expand_and_shrink`\ 》小节；
 
 - 哈希键的字典只扩展，不收缩；
 
