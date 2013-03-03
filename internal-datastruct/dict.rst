@@ -663,10 +663,10 @@ Redis 使用不同的收缩和扩展策略：
     def iter_dict(dict):
 
         # 迭代 0 号哈希表
-        iter_table(ht[1]->table)
+        iter_table(ht[0]->table)
 
         # 如果正在执行 rehash ，那么也迭代 1 号哈希表
-        if dict.is_rehashing(): iter_table(ht[0]->table)
+        if dict.is_rehashing(): iter_table(ht[1]->table)
 
 
     def iter_table(table):
