@@ -1,0 +1,15 @@
+digraph g {
+
+    node [shape = record];
+
+    add [label = "添加新元素到 intset"];
+
+    upgrade_or_not [label = "intset 需要升级？", shape = diamond];
+
+    add -> upgrade_or_not;
+
+    upgrade_or_not -> intsetAdd [label = "不需要"];
+
+    upgrade_or_not -> intsetUpgradeAndAdd [label = "需要"];
+
+}
