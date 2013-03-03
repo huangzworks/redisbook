@@ -10,9 +10,9 @@ digraph empty_dict {
 
     dict [label="dict | type | privdata |<ht> ht[2] | rehashidx | iterators"];
 
-    ht0 [label="<dictht>dictht |<table> table | size:0 | sizemask:0 | used:0"];
+    ht0 [label="<dictht>dictht |<table> table | size: 0 | sizemask: 0 | used: 0"];
 
-    ht1 [label="<dictht>dictht |<table> table | size:0 | sizemask:0 | used:0"];
+    ht1 [label="<dictht>dictht |<table> table | size: 0 | sizemask: 0 | used: 0"];
 
     null0 [label="NULL", shape=plaintext];
     null1 [label="NULL", shape=plaintext];

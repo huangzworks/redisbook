@@ -20,7 +20,7 @@ digraph dictAdd {
 
     dict_empty_or_not -> init_hash_table_one [label="是"];
 
-    init_hash_table_one -> start;
+    init_hash_table_one -> need_rehash_or_not;
 
     need_rehash_or_not [label="需要 rehash ？", shape=diamond];
 
@@ -30,7 +30,7 @@ digraph dictAdd {
 
     need_rehash_or_not -> begin_incremental_rehash [label="需要，\n并且 rehash 未进行"];
 
-    begin_incremental_rehash -> start;
+    begin_incremental_rehash -> rehashing_or_not;
 
     rehashing_or_not [label="rehash 正在进行中？", shape=diamond];
 

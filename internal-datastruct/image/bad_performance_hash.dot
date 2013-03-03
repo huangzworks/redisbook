@@ -17,7 +17,7 @@ digraph bad_performance_hash {
     node02 [label="Entry"];
     node03 [label="Entry"];
     node04 [label="Entry"];
-    node05 [label="Entry"];
+    node05 [label="NULL", shape=plaintext];
 
     bucket:0 -> node0;
     node0 -> node01;
@@ -30,10 +30,12 @@ digraph bad_performance_hash {
     node1 [label="Entry"];
     node11 [label="Entry"];
     node12 [label="Entry"];
+    node13 [label="NULL", shape=plaintext];
 
     bucket:1 -> node1;
     node1 -> node11;
     node11 -> node12;
+    node12 -> node13;
 
     // node 2
     node2 [label="Entry"];
@@ -41,12 +43,14 @@ digraph bad_performance_hash {
     node22 [label="Entry"];
     node23 [label="Entry"];
     node24 [label="Entry"];
+    node25 [label="NULL", shape=plaintext];
 
     bucket:2 -> node2;
     node2 -> node21;
     node21 -> node22;
     node22 -> node23;
     node23 -> node24;
+    node24 -> node25;
 
     // node 3
     node3 [label="Entry"];
@@ -54,7 +58,7 @@ digraph bad_performance_hash {
     node32 [label="Entry"];
     node33 [label="Entry"];
     node34 [label="Entry"];
-    node35 [label="Entry"];
+    node35 [label="NULL", shape=plaintext];
 
     bucket:3 -> node3;
     node3 -> node31;
@@ -66,9 +70,11 @@ digraph bad_performance_hash {
     // node 4
     node4 [label="Entry"];
     node41 [label="Entry"];
+    node42 [label="NULL", shape=plaintext];
 
     bucket:4 -> node4;
     node4 -> node41;
+    node41 -> node42;
 
     // node 5
     node5 [label="Entry"];
@@ -76,7 +82,7 @@ digraph bad_performance_hash {
     node52 [label="Entry"];
     node53 [label="Entry"];
     node54 [label="Entry"];
-    node55 [label="Entry"];
+    node55 [label="NULL", shape=plaintext];
 
     bucket:5 -> node5;
     node5 -> node51;
@@ -90,12 +96,14 @@ digraph bad_performance_hash {
     node61 [label="Entry"];
     node62 [label="Entry"];
     node63 [label="Entry"];
+    node64 [label="NULL", shape=plaintext];
 
 
     bucket:6 -> node6;
     node6 -> node61;
     node61 -> node62;
     node62 -> node63;
+    node63 -> node64;
 
     // node 7
     node7 [label="Entry"];
@@ -103,7 +111,7 @@ digraph bad_performance_hash {
     node72 [label="Entry"];
     node73 [label="Entry"];
     node74 [label="Entry"];
-    node75 [label="Entry"];
+    node75 [label="NULL", shape=plaintext];
 
     bucket:7 -> node7;
     node7 -> node71;

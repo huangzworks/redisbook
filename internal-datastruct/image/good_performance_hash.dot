@@ -12,20 +12,24 @@ digraph good_performance_hash {
     node [height=.1];
 
     node0 [label="Entry"];
+    node0_null [label="NULL", shape=plaintext];
     node1 [label="Entry"];
-    node2 [label="Entry"];
+    node1_null [label="NULL", shape=plaintext];
+    node2 [label="NULL", shape=plaintext];
     node3 [label="Entry"];
-    node4 [label="Entry"];
+    node3_null [label="NULL", shape=plaintext];
+    node4 [label="NULL", shape=plaintext];
     node5 [label="Entry"];
-    node6 [label="Entry"];
-    node7 [label="Entry"];
+    node5_null [label="NULL", shape=plaintext];
+    node6 [label="NULL", shape=plaintext];
+    node7 [label="NULL", shape=plaintext];
 
-    bucket:0 -> node0;
-    bucket:1 -> node1;
+    bucket:0 -> node0; node0 -> node0_null;
+    bucket:1 -> node1; node1 -> node1_null;
     bucket:2 -> node2;
-    bucket:3 -> node3;
+    bucket:3 -> node3; node3 -> node3_null;
     bucket:4 -> node4;
-    bucket:5 -> node5;
+    bucket:5 -> node5; node5 -> node5_null;
     bucket:6 -> node6;
     bucket:7 -> node7;
 }
