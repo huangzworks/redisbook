@@ -7,7 +7,7 @@ digraph command_poly {
 
     is_obj_nil_or_not [label="数据库返回 NULL ？",shape=diamond];
 
-    return_nil [label="key 不存在\n返回 nil"];
+    return_nil [label="key 不存在\n返回空回复"];
 
     is_type_list_or_not [label="redisObject 的类型为\nREDIS_LIST ？",shape=diamond];
 
