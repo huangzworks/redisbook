@@ -1,26 +1,26 @@
 .. _sorted_set_chapter:
 
-有序集 —— SortedSet
+有序集
 ========================
 
-``REDIS_ZSET`` （有序集）是 ``ZADD`` 、 ``ZCOUNT`` 等命令的操作对象，
+``REDIS_ZSET`` （有序集）是 :ref:`ZADD` 、 :ref:`ZCOUNT` 等命令的操作对象，
 它使用 ``REDIS_ENCODING_ZIPLIST`` 和 ``REDIS_ENCODING_SKIPLIST`` 两种方式编码：
 
 .. image:: image/redis_zset.png
 
 
-有序集的创建
+编码的选择
 ---------------
 
-在通过 ``ZADD`` 命令添加第一个元素到空 ``key`` 时，
+在通过 :ref:`ZADD` 命令添加第一个元素到空 ``key`` 时，
 程序通过检查输入的第一个元素来决定该创建什么编码的有序集。
 
 如果第一个元素符合以下条件的话，
 就创建一个 ``REDIS_ENCODING_ZIPLIST`` 编码的有序集：
 
-- 服务器属性 ``server.zset_max_ziplist_entries`` 的值大于 ``0`` （默认为 ``128`` ）
+- 服务器属性 ``server.zset_max_ziplist_entries`` 的值大于 ``0`` （默认为 ``128`` ）。
 
-- 元素的 ``member`` 长度小于服务器属性 ``server.zset_max_ziplist_value`` 的值（默认为 ``64`` ）
+- 元素的 ``member`` 长度小于服务器属性 ``server.zset_max_ziplist_value`` 的值（默认为 ``64`` ）。
 
 否则，程序就创建一个 ``REDIS_ENCODING_SKIPLIST`` 编码的有序集。
 
@@ -37,8 +37,8 @@
 - 新添加元素的 ``member`` 的长度大于服务器属性 ``server.zset_max_ziplist_value`` 的值（默认值为 ``64`` ）
 
 
-ZIPLIST 编码
-------------------
+ZIPLIST 编码的有序集
+--------------------------
 
 当使用 ``REDIS_ENCODING_ZIPLIST`` 编码时，
 有序集将元素保存到 ``ziplist`` 数据结构里面。
@@ -76,8 +76,8 @@ ZIPLIST 编码
 取决于它们底层所执行的 ``ziplist`` 操作。
 
 
-SKIPLIST 编码
-----------------
+SKIPLIST 编码的有序集
+-------------------------
 
 当使用 ``REDIS_ENCODING_SKIPLIST`` 编码时，
 有序集元素由 ``redis.h/zset`` 结构来保存：
@@ -88,10 +88,13 @@ SKIPLIST 编码
      * 有序集
      */
     typedef struct zset {
+
         // 字典
         dict *dict;
+
         // 跳跃表
         zskiplist *zsl;
+
     } zset;
 
 ``zset`` 同时使用字典和跳跃表两个数据结构来保存有序集元素。
@@ -112,7 +115,7 @@ SKIPLIST 编码
 有序集可以在 :math:`O(1)` 复杂度内：
 
 - 检查给定 ``member`` 是否存在于有序集（被很多底层函数使用）；
-- 取出 ``member`` 对应的 ``score`` 值（实现 ``ZSCORE`` 命令）。
+- 取出 ``member`` 对应的 ``score`` 值（实现 :ref:`ZSCORE` 命令）。
 
 另一方面，
 通过使用跳跃表，
@@ -120,6 +123,7 @@ SKIPLIST 编码
 
 - 在 :math:`O(\log N)` 期望时间、 :math:`O(N)` 最坏时间内根据 ``score`` 对 ``member`` 进行定位（被很多底层函数使用）；
 
-- 范围性查找和处理操作，这是（高效地）实现 ``ZRANGE`` 、 ``ZRANK`` 和 ``ZINTERSTORE`` 等命令的关键。
+- 范围性查找和处理操作，这是（高效地）实现 :ref:`ZRANGE` 、 :ref:`ZRANK` 和 :ref:`ZINTERSTORE` 等命令的关键。
 
-以上两点，如果只使用字典结构的话，是很难高效地实现的。
+通过同时使用字典和跳跃表，
+有序集可以高效地实现按成员查找和按顺序查找两种操作。
