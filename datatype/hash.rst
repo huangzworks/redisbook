@@ -3,7 +3,7 @@
 哈希表
 =================
 
-``REDIS_HASH`` （哈希表）是 ``HSET`` 、 ``HLEN`` 等命令的操作对象，
+``REDIS_HASH`` （哈希表）是 :ref:`HSET` 、 :ref:`HLEN` 等命令的操作对象，
 它使用 ``REDIS_ENCODING_ZIPLIST`` 和 ``REDIS_ENCODING_HT`` 两种编码方式：
 
 .. image:: image/redis_hash.png
