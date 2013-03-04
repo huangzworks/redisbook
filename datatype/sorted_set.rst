@@ -1,4 +1,4 @@
-.. _sorted_set:
+.. _sorted_set_chapter:
 
 有序集 —— SortedSet
 ========================
