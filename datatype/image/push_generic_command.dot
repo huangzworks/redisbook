@@ -18,7 +18,7 @@ digraph push_generic_command {
 
     // call_signal_list_as_ready [label = "调用 signalListAsReady"];
 
-    add_key_to_ready_list_if_need [label = "如果 key 存在于 server.db-\>blocking_keys\n那么为 key 创建一个 readyList 结构\n并将它添加到 server.ready_keys 链表中"];
+    add_key_to_ready_list_if_need [label = "如果 key 存在于 server.db[i]-\>blocking_keys\n那么为 key 创建一个 readyList 结构\n并将它添加到 server.ready_keys 链表中"];
 
     push_value_to_list [label = "将输入值推入列表"];
 

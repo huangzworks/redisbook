@@ -8,7 +8,7 @@ digraph redis_list {
 
     // encoding
 
-    REDIS_ENCODING_ZIPLIST [label="ziplist\nREDIS_ENCODING_ZIPLIST"];
+    REDIS_ENCODING_ZIPLIST [label="压缩列表\nREDIS_ENCODING_ZIPLIST"];
     REDIS_ENCODING_LINKEDLIST [label="双端链表\nREDIS_ENCODING_LINKEDLIST"];
 
     // edge
