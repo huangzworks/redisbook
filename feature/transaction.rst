@@ -26,22 +26,22 @@ Redis 通过 :ref:`MULTI` 、 :ref:`DISCARD` 、 :ref:`EXEC` 和 :ref:`WATCH` �
 
 ::
 
-    redis 127.0.0.1:6379> MULTI
+    redis> MULTI
     OK
 
-    redis 127.0.0.1:6379> SET book-name "Mastering C++ in 21 days"
+    redis> SET book-name "Mastering C++ in 21 days"
     QUEUED
 
-    redis 127.0.0.1:6379> GET book-name
+    redis> GET book-name
     QUEUED
 
-    redis 127.0.0.1:6379> SADD tag "C++" "Programming" "Mastering Series"
+    redis> SADD tag "C++" "Programming" "Mastering Series"
     QUEUED
 
-    redis 127.0.0.1:6379> SMEMBERS tag
+    redis> SMEMBERS tag
     QUEUED
 
-    redis 127.0.0.1:6379> EXEC
+    redis> EXEC
     1) OK
     2) "Mastering C++ in 21 days"
     3) (integer) 3
@@ -129,19 +129,19 @@ Redis 通过 :ref:`MULTI` 、 :ref:`DISCARD` 、 :ref:`EXEC` 和 :ref:`WATCH` �
 
 ::
 
-    redis 127.0.0.1:6379> MULTI
+    redis> MULTI
     OK
 
-    redis 127.0.0.1:6379> SET book-name "Mastering C++ in 21 days"
+    redis> SET book-name "Mastering C++ in 21 days"
     QUEUED
 
-    redis 127.0.0.1:6379> GET book-name
+    redis> GET book-name
     QUEUED
 
-    redis 127.0.0.1:6379> SADD tag "C++" "Programming" "Mastering Series"
+    redis> SADD tag "C++" "Programming" "Mastering Series"
     QUEUED
 
-    redis 127.0.0.1:6379> SMEMBERS tag
+    redis> SMEMBERS tag
     QUEUED
 
 那么程序将为客户端创建以下事务队列：
