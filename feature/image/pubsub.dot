@@ -12,23 +12,29 @@ digraph pubsub {
     client1 [label = "client1"];
     client5 [label = "client5"];
     client2 [label = "client2"];
+    null_1 [label = "NULL", shape = plaintext];
     
     pubsub:channel1 -> client2;
     client2 -> client5;
     client5 -> client1;
+    client1 -> null_1;
 
     // clients blocking for channel2
     client7 [label = "client7"];
+    null_2 [label = "NULL", shape = plaintext];
 
     pubsub:channel2 -> client7;
+    client7 -> null_2;
 
     // channel
 
     client3 [label = "client3"];
     client4 [label = "client4"];
     client6 [label = "client6"];
+    null_3 [label = "NULL", shape = plaintext];
 
     pubsub:channel3 -> client3;
     client3 -> client4;
     client4 -> client6;
+    client6 -> null_3;
 }

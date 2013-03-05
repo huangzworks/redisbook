@@ -1,7 +1,7 @@
 订阅与发布
 ==========================
 
-Redis 通过 ``PUBLISH`` 、 ``SUBSCRIBE`` 等命令实现了订阅与发布模式，
+Redis 通过 :ref:`PUBLISH` 、 :ref:`SUBSCRIBE` 等命令实现了订阅与发布模式，
 这个功能提供两种信息机制，
 分别是订阅/发布到频道和订阅/发布到模式，
 下文先讨论订阅/发布到频道的实现，
@@ -10,7 +10,7 @@ Redis 通过 ``PUBLISH`` 、 ``SUBSCRIBE`` 等命令实现了订阅与发布模�
 频道的订阅与信息发送
 ------------------------
 
-Redis 的 ``SUBSCRIBE`` 命令可以让客户端订阅任意数量的频道，
+Redis 的 :ref:`SUBSCRIBE` 命令可以让客户端订阅任意数量的频道，
 每当有新信息发送到被订阅的频道时，
 信息就会被发送给所有订阅指定频道的客户端。
 
@@ -20,21 +20,22 @@ Redis 的 ``SUBSCRIBE`` 命令可以让客户端订阅任意数量的频道，
 
 .. image:: image/pubsub_relation.png
 
-当有新消息通过 ``PUBLISH`` 命令发送给频道 ``channel1`` 时，
+当有新消息通过 :ref:`PUBLISH` 命令发送给频道 ``channel1`` 时，
 这个消息就会被发送给订阅它的三个客户端：
 
 .. image:: image/send_message_to_subscriber.png
 
-在后面的内容中，我们将来探讨 ``SUBSCRIBE`` 和 ``PUBLISH`` 命令的实现，
+在后面的内容中，
+我们将探讨 :ref:`SUBSCRIBE` 和 :ref:`PUBLISH` 命令的实现，
 以及这套订阅与发布机制的运作原理。
 
 
 订阅频道
 ----------------------
 
-每个 Redis 服务器进程都维持着一个 ``redis.h/redisServer`` 结构，
-这个结构的 ``pubsub_channels`` 属性是一个字典，
-用于保存订阅频道的信息：
+每个 Redis 服务器进程都维持着一个表示服务器状态的 ``redis.h/redisServer`` 结构，
+结构的 ``pubsub_channels`` 属性是一个字典，
+这个字典就用于保存订阅频道的信息：
 
 ::
 
@@ -53,23 +54,24 @@ Redis 的 ``SUBSCRIBE`` 命令可以让客户端订阅任意数量的频道，
 
 .. image:: image/pubsub.png
 
-当客户端调用 ``SUBSCRIBE`` 命令时，
+当客户端调用 :ref:`SUBSCRIBE` 命令时，
 程序就将客户端和要订阅的频道在 ``pubsub_channels`` 字典中关联起来。
 
 举个例子，如果客户端 ``client10086`` 执行命令 ``SUBSCRIBE channel1 channel2 channel3`` ，那么前面展示的 ``pubsub_channels`` 将变成下面这个样子：
 
 .. image:: image/new_subscribe.png
 
-``SUBSCRIBE`` 命令的行为可以用伪代码表示如下：
+:ref:`SUBSCRIBE` 命令的行为可以用伪代码表示如下：
 
 .. code-block:: python
 
-    def SUBSCRIBE(client, subscribe_channels):
+    def SUBSCRIBE(client, channels):
 
-        client = get_current_client()                               # 获取当前客户端
+        # 遍历所有输入频道
+        for channel in channels:
 
-        for channel in subscribe_channels:                          # 遍历所有输入频道
-            redisServer.pubsub_channels[channel].append(client)     # 将客户端添加到链表的末尾
+            # 将客户端添加到链表的末尾
+            redisServer.pubsub_channels[channel].append(client)
 
 通过 ``pubsub_channels`` 字典，
 程序只要检查某个频道是否字典的键，
@@ -81,8 +83,8 @@ Redis 的 ``SUBSCRIBE`` 命令可以让客户端订阅任意数量的频道，
 发送信息到频道
 ---------------------
 
-了解了 ``pubsub_channels`` 字典的结构，
-解释 ``PUBLISH`` 命令的实现就非常简单了 —— 
+了解了 ``pubsub_channels`` 字典的结构之后，
+解释 :ref:`PUBLISH` 命令的实现就非常简单了：
 当调用 ``PUBLISH channel message`` 命令，
 程序首先根据 ``channel`` 定位到字典的键，
 然后将信息发送给字典值链表中的所有客户端。
@@ -92,14 +94,9 @@ Redis 的 ``SUBSCRIBE`` 命令可以让客户端订阅任意数量的频道，
 
 .. image:: image/pubsub.png
 
-``PUBLISH`` 命令的实现可以用以下伪代码来描述：
+:ref:`PUBLISH` 命令的实现可以用以下伪代码来描述：
 
-.. code-block:: python
-
-    def PUBLISH(channel, message):
-        
-        for client in server.pubsub_channels[channel]:      # 遍历所有订阅频道 channel 的客户端
-            send_message(client, message)                   # 将信息发送给它们
+.. include:: _publish_without_pattern
 
 
 退订频道
@@ -114,7 +111,7 @@ Redis 的 ``SUBSCRIBE`` 命令可以让客户端订阅任意数量的频道，
 模式的订阅与信息发送
 ----------------------------
 
-当使用 ``PUBLISH`` 命令发送信息到某个频道时，
+当使用 :ref:`PUBLISH` 命令发送信息到某个频道时，
 不仅所有订阅该频道的客户端会收到信息，
 如果有某个/某些模式和这个频道匹配的话，
 那么所有订阅这个/这些频道的客户端也同样会收到信息。
@@ -132,8 +129,8 @@ Redis 的 ``SUBSCRIBE`` 命令可以让客户端订阅任意数量的频道，
 .. image:: image/send_message_to_pattern.png
 
 因为模式只保存订阅者（客户端）的信息，
-它本身并不接受 ``PUBLISH`` 命令发送过来的信息、也不对信息进行任何转发，
-``PUBLISH`` 命令的信息是直接发给订阅模式的客户端，而不是模式本身，
+它本身并不接受 :ref:`PUBLISH` 命令发送过来的信息、也不对信息进行任何转发，
+:ref:`PUBLISH` 命令的信息是直接发给订阅模式的客户端，而不是模式本身，
 所以图中从 ``tweet.shop.kindle`` 频道到 ``tweet.shop.*`` 模式之间的连接线并没有使用 ``message`` 标签。
 
 订阅模式
@@ -161,7 +158,7 @@ Redis 的 ``SUBSCRIBE`` 命令可以让客户端订阅任意数量的频道，
 ``client`` 属性保存着订阅模式的客户端，而 ``pattern`` 属性则保存着被订阅的模式。
 
 每当调用 ``PSUBSCRIBE`` 命令订阅一个模式时，
-程序就创建一个包含客户端信息和模式的 ``pubsubPattern`` 结构，
+程序就创建一个包含客户端信息和被订阅模式的 ``pubsubPattern`` 结构，
 并将该结构添加到 ``redisServer.pubsub_patterns`` 链表中。
 
 作为例子，下图展示了一个包含两个模式的 ``pubsub_patterns`` 链表，
@@ -180,36 +177,39 @@ Redis 的 ``SUBSCRIBE`` 命令可以让客户端订阅任意数量的频道，
 发送信息到模式
 -----------------
 
-发送信息到模式的工作也是由 ``PUBLISH`` 命令进行的，
+发送信息到模式的工作也是由 :ref:`PUBLISH` 命令进行的，
 在前面讲解频道的时候，
 我们给出了这样一段伪代码，
-说它定义了 ``PUBLISH`` 命令的行为：
+说它定义了 :ref:`PUBLISH` 命令的行为：
 
-.. code-block:: python
+.. include:: _publish_without_pattern
 
-    def PUBLISH(channel, message):
-        
-        for client in server.pubsub_channels[channel]:      # 取出所有订阅频道 channel 的客户端
-            send_message(client, message)                   # 将信息发送给它们
-
-但是，这段伪代码并没有完整描述 ``PUBLISH`` 命令的行为，
-因为 ``PUBLISH`` 除了将 ``message`` 发送到所有订阅 ``channel`` 的客户端之外，
+但是，这段伪代码并没有完整描述 :ref:`PUBLISH` 命令的行为，
+因为 :ref:`PUBLISH` 除了将 ``message`` 发送到所有订阅 ``channel`` 的客户端之外，
 它还会将 ``channel`` 和 ``pubsub_patterns`` 中的模式进行对比，
 如果 ``channel`` 和某个模式匹配的话，
 那么也将 ``message`` 发送到订阅那个模式的客户端。
 
-完整描述 ``PUBLISH`` 功能的伪代码定于如下：
+完整描述 :ref:`PUBLISH` 功能的伪代码定于如下：
 
 .. code-block:: python
 
     def PUBLISH(channel, message):
-        
-        for client in server.pubsub_channels[channel]:      # 取出所有订阅频道 channel 的客户端
-            send_message(client, message)                   # 将信息发送给它们
 
-        for pattern, client in server.pubsub_patterns:      # 取出所有模式，以及订阅模式的客户端
-            if match(channel, pattern):                     # 如果 channel 和模式匹配
-                send_message(client, message)               # 那么将信息也发给订阅该模式的客户端
+        # 遍历所有订阅频道 channel 的客户端
+        for client in server.pubsub_channels[channel]:
+
+            # 将信息发送给它们
+            send_message(client, message)                   
+
+        # 取出所有模式，以及订阅模式的客户端
+        for pattern, client in server.pubsub_patterns:      
+
+            # 如果 channel 和模式匹配
+            if match(channel, pattern):                     
+
+                # 那么也将信息发给订阅这个模式的客户端
+                send_message(client, message)               
 
 举个例子，如果 Redis 服务器的 ``pubsub_patterns`` 状态如下：
 
