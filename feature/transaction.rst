@@ -1,59 +1,69 @@
 事务
 ===============
 
-Redis 通过 ``MULTI`` 、 ``DISCARD`` 、 ``EXEC`` 和 ``WATCH`` 几个命令来实现事务功能，
-本章首先讨论只使用 ``MULTI/DISCARD/EXEC`` 三个命令实现的一般事务，
-然后再来讨论带有 ``WATCH`` 的事务的实现。
+Redis 通过 :ref:`MULTI` 、 :ref:`DISCARD` 、 :ref:`EXEC` 和 :ref:`WATCH` 四个命令来实现事务功能，
+本章首先讨论使用 :ref:`MULTI` 、 :ref:`DISCARD` 和 :ref:`EXEC` 三个命令实现的一般事务，
+然后再来讨论带有 :ref:`WATCH` 的事务的实现。
 
-因为事务的安全性通常也是一个重要话题，所以本章最后以常见的 ACID 性质对 Redis 事务的安全性进行了说明。
+因为事务的安全性也非常重要，
+所以本章最后通过常见的 ACID 性质对 Redis 事务的安全性进行了说明。
 
 
 事务
 ---------------------------
 
-事务提供了一种“将多个命令打包，然后一次性、按顺序地执行”的机制，
-并且在事务执行的期间不会被中断，服务器在执行完事务中的所有命令之后，才会继续处理其他客户端的其他命令。
+事务提供了一种“将多个命令打包，
+然后一次性、按顺序地执行”的机制，
+并且事务在执行的期间不会主动中断 ——
+服务器在执行完事务中的所有命令之后，
+才会继续处理其他客户端的其他命令。
 
-以下是一个事务的例子，它将多个命令入队到事务中，然后由 ``EXEC`` 命令启动事务，一并执行事务中的所有命令：
+以下是一个事务的例子，
+它先以 :ref:`MULTI` 开始一个事务，
+然后将多个命令入队到事务中，
+最后由 :ref:`EXEC` 命令触发事务，
+一并执行事务中的所有命令：
 
 ::
 
-    redis> MULTI
+    redis 127.0.0.1:6379> MULTI
     OK
 
-    redis> SET book-name "The Design and Implementation of Redis"
+    redis 127.0.0.1:6379> SET book-name "Mastering C++ in 21 days"
     QUEUED
 
-    redis> GET book-name
+    redis 127.0.0.1:6379> GET book-name
     QUEUED
 
-    redis> SADD tag Redis Database NoSQL
+    redis 127.0.0.1:6379> SADD tag "C++" "Programming" "Mastering Series"
     QUEUED
 
-    redis> SMEMBERS tag
+    redis 127.0.0.1:6379> SMEMBERS tag
     QUEUED
 
-    redis> EXEC
+    redis 127.0.0.1:6379> EXEC
     1) OK
-    2) "The Design and Implementation of Redis"
+    2) "Mastering C++ in 21 days"
     3) (integer) 3
-    4) 1) "Database"
-       2) "Redis"
-       3) "NoSQL"
+    4) 1) "Mastering Series"
+       2) "C++"
+       3) "Programming"
 
 一个事务从开始到执行会经历以下三个阶段：
 
-1) 开始事务
-2) 命令入队
-3) 执行事务
+1. 开始事务。
 
-下文就分别来介绍这三个阶段，以此了解 Redis 事务功能的运作机制。
+2. 命令入队。
+
+3. 执行事务。
+
+下文将分别介绍事务的这三个阶段。
 
 
 开始事务
 -----------
 
-``MULTI`` 命令的执行标记着事务的开始：
+:ref:`MULTI` 命令的执行标记着事务的开始：
 
 ::
 
@@ -85,7 +95,9 @@ Redis 通过 ``MULTI`` 、 ``DISCARD`` 、 ``EXEC`` 和 ``WATCH`` 几个命令�
 当客户端进入事务状态之后，
 服务器在收到来自客户端的命令时，
 不会立即执行命令，
-而是将这些命令全部放进一个事务队列里：
+而是将这些命令全部放进一个事务队列里，
+然后返回 ``QUEUED`` ，
+表示命令已入队：
 
 ::
 
@@ -105,32 +117,36 @@ Redis 通过 ``MULTI`` 、 ``DISCARD`` 、 ``EXEC`` 和 ``WATCH`` 几个命令�
 
 事务队列是一个数组，
 每个数组项是都包含三个属性：
-要执行的命令（cmd）、传给命令的参数（argv）、以及参数的个数（argc）。
+
+1. 要执行的命令（cmd）。
+
+2. 命令的参数（argv）。
+
+3. 参数的个数（argc）。
 
 举个例子，
 如果客户端执行以下命令：
 
 ::
 
-    redis> MULTI
+    redis 127.0.0.1:6379> MULTI
     OK
 
-    redis> SET number 123
+    redis 127.0.0.1:6379> SET book-name "Mastering C++ in 21 days"
     QUEUED
 
-    redis> SADD animal panda
+    redis 127.0.0.1:6379> GET book-name
     QUEUED
 
-    redis> LPUSH book-list "Mastering C++ in 21 days"
+    redis 127.0.0.1:6379> SADD tag "C++" "Programming" "Mastering Series"
     QUEUED
 
-    redis> LLEN book-list
+    redis 127.0.0.1:6379> SMEMBERS tag
     QUEUED
 
-那么程序将创建以下事务数组：
+那么程序将为客户端创建以下事务队列：
 
 .. include:: _example_of_transaction_queue
-
 
 执行事务
 ----------
@@ -139,8 +155,8 @@ Redis 通过 ``MULTI`` 、 ``DISCARD`` 、 ``EXEC`` 和 ``WATCH`` 几个命令�
 当客户端进入事务状态之后，
 客户端发送的命令就会被放进事务队列里。
 
-但其实并不是所有的命令都会被放进事务队列 ——
-其中的例外就是 ``EXEC`` 、 ``DISCARD`` 、 ``MULTI`` 和 ``WATCH`` 这四个命令，
+但其实并不是所有的命令都会被放进事务队列，
+其中的例外就是 :ref:`EXEC` 、 :ref:`DISCARD` 、 :ref:`MULTI` 和 :ref:`WATCH` 这四个命令 —— 
 当这四个命令从客户端发送到服务器时，
 它们会像客户端处于非事务状态一样，
 直接被服务器执行：
@@ -148,64 +164,96 @@ Redis 通过 ``MULTI`` 、 ``DISCARD`` 、 ``EXEC`` 和 ``WATCH`` 几个命令�
 .. image:: image/not_enque_command.png
 
 如果客户端正处于事务状态，
-那么当 ``EXEC`` 命令执行时，
+那么当 :ref:`EXEC` 命令执行时，
 服务器根据客户端所保存的事务队列，
 以先进先出（FIFO）的方式执行事务队列中的命令：
-最先入队的命令最先执行，而最后入队的命令最后执行。
+最先入队的命令最先执行，
+而最后入队的命令最后执行。
 
-比如说，对于以下事务数组：
+比如说，对于以下事务队列：
 
 .. include:: _example_of_transaction_queue
 
-服务器首先执行 ``SET`` 命令，然后执行 ``SADD`` 命令，再然后执行 ``LPUSH`` 命令，最后执行 ``LLEN`` 命令。
+程序会首先执行 :ref:`SET` 命令，
+然后执行 :ref:`GET` 命令，
+再然后执行 :ref:`SADD` 命令，
+最后执行 :ref:`SMEMBERS` 命令。
 
-每个命令执行所得的结果值会被保存到一个回复队列里，
+执行事务中的命令所得的结果会以 FIFO 的顺序保存到一个回复队列中。
+
+比如说，对于上面给出的事务队列，程序将为队列中的命令创建如下回复队列：
+
+=========== ==========================     ================================================================
+数组索引      回复类型                      回复内容                             
+=========== ==========================     ================================================================
+``0``         status code reply             ``OK``                               
+``1``         bulk reply                    ``"Mastering C++ in 21 days"``       
+``2``         integer reply                 ``3``                                
+``3``         multi-bulk reply              ``["Mastering Series", "C++", "Programming"]`` 
+=========== ==========================     ================================================================
+
 当事务队列里的所有命令被执行完之后，
-``EXEC`` 命令会将回复队列作为自己的执行结果返回给客户端，
+:ref:`EXEC` 命令会将回复队列作为自己的执行结果返回给客户端，
 客户端从事务状态返回到非事务状态，
-至此，事务执行完毕。
+至此，
+事务执行完毕。
 
-事务执行的整个过程可以用以下伪代码表示：
+事务的整个执行过程可以用以下伪代码表示：
 
 .. code-block:: python
-  
-    reply_queue = []                                    # 回复队列
+ 
+    def execute_transaction():
 
-    for cmd, argv, argc in transaction_queue:           # 取出事务队列里的所有命令、参数和参数数量
-        reply = exec_command(cmd, argv, argc)           # 执行命令，并取得命令的返回值
-        reply_queue.append(reply)                       # 将返回值追加到回复队列末尾
+        # 创建空白的回复队列
+        reply_queue = []
 
-    set_client_to_non_transaction_state(client)         # 取消客户端的事务状态
+        # 取出事务队列里的所有命令、参数和参数数量
+        for cmd, argv, argc in client.transaction_queue:
 
-    send_reply_to_client(client, reply_queue)           # 将事务的执行结果返回给客户端
+            # 执行命令，并取得命令的返回值
+            reply = execute_redis_command(cmd, argv, argc)
+
+            # 将返回值追加到回复队列末尾
+            reply_queue.append(reply)
+
+        # 清除客户端的事务状态
+        clear_transaction_state(client)
+
+        # 清空事务队列
+        clear_transaction_queue(client)
+
+        # 将事务的执行结果返回给客户端
+        send_reply_to_client(client, reply_queue)
 
 
 在事务和非事务状态下执行命令
 --------------------------------------
 
-无论在事务状态下，还是在非事务状态下，Redis 命令都由同一个函数执行，
+无论在事务状态下，
+还是在非事务状态下，
+Redis 命令都由同一个函数执行，
 所以它们共享很多服务器的一般设置，
 比如 AOF 的配置、RDB 的配置，以及内存限制，等等。
 
-不过事务中的命令和普通命令在执行上还是有一点区别的，其他最重要的两点是：
+不过事务中的命令和普通命令在执行上还是有一点区别的，其中最重要的两点是：
 
 1. 非事务状态下的命令以单个命令为单位执行，前一个命令和后一个命令的客户端不一定是同一个；
    
    而事务状态则是以一个事务为单位，执行事务队列中的所有命令：除非当前事务执行完毕，否则服务器不会中断事务，也不会执行其他客户端的其他命令。
 
-2. 在非事务状态下，执行命令所得的结果会立即被返回给客户端。
+2. 在非事务状态下，执行命令所得的结果会立即被返回给客户端；
 
-   而事务则是将所有命令的结果集合到回复队列，再作为 ``EXEC`` 命令的结果返回给客户端。
+   而事务则是将所有命令的结果集合到回复队列，再作为 :ref:`EXEC` 命令的结果返回给客户端。
 
 
 事务状态下的 DISCARD 、 MULTI 和 WATCH 命令
 ------------------------------------------------------
 
-除了 ``EXEC`` 之外，
+除了 :ref:`EXEC` 之外，
 服务器在客户端处于事务状态时，
-不加入到事务队列而直接执行的另外三个命令是 ``DISCARD`` 、 ``MULTI`` 和 ``WATCH`` 。
+不加入到事务队列而直接执行的另外三个命令是 :ref:`DISCARD` 、 :ref:`MULTI` 和 :ref:`WATCH` 。
 
-``DISCARD`` 命令用于取消一个事务，
+:ref:`DISCARD` 命令用于取消一个事务，
 它清空客户端的整个事务队列，
 然后将客户端从事务状态调整回非事务状态，
 最后返回字符串 ``OK`` 给客户端，
@@ -213,25 +261,26 @@ Redis 通过 ``MULTI`` 、 ``DISCARD`` 、 ``EXEC`` 和 ``WATCH`` 几个命令�
 
 Redis 的事务是不可嵌套的，
 当客户端已经处于事务状态，
-而客户端又再向服务器发送 ``MULTI`` 时，
+而客户端又再向服务器发送 :ref:`MULTI` 时，
 服务器只是简单地向客户端发送一个错误，
 然后继续等待其他命令的入队。
-``MULTI`` 命令的发送不会造成整个事务失败，
+:ref:`MULTI` 命令的发送不会造成整个事务失败，
 也不会修改事务队列中已有的数据。
 
-``WATCH`` 只能在客户端进入事务状态之前执行，
-在事务状态下发送 ``WATCH`` 命令会引发一个错误，
+:ref:`WATCH` 只能在客户端进入事务状态之前执行，
+在事务状态下发送 :ref:`WATCH` 命令会引发一个错误，
 但它不会造成整个事务失败，
-也不会修改事务队列中已有的数据（和前面处理 ``MULTI`` 的情况一样）。
+也不会修改事务队列中已有的数据（和前面处理 :ref:`MULTI` 的情况一样）。
 
 
 带 WATCH 的事务
 -----------------------
 
-``WATCH`` 命令用于在事务开始之前监视任意数量的键，
-当调用 ``EXEC`` 命令执行事务时，
+:ref:`WATCH` 命令用于在事务开始之前监视任意数量的键：
+当调用 :ref:`EXEC` 命令执行事务时，
 如果任意一个被监视的键已经被其他客户端修改了，
-那么整个事务不再执行，直接返回失败。
+那么整个事务不再执行，
+直接返回失败。
 
 以下示例展示了一个执行失败的事务例子：
 
@@ -266,10 +315,10 @@ T5              ``EXEC``
 ========   ==================================   ==================================
 
 在时间 T4 ，客户端 B 修改了 ``name`` 键的值，
-当客户端 A 在 T5 执行 ``EXEC`` 时，Redis 会发现 ``name`` 这个被监视的键已经被修改，
+当客户端 A 在 T5 执行 :ref:`EXEC` 时，Redis 会发现 ``name`` 这个被监视的键已经被修改，
 因此客户端 A 的事务不会被执行，而是直接返回失败。
 
-下文就来介绍 ``WATCH`` 的实现机制，并且看看事务系统是如何检查某个被监视的键是否被修改，从而保证事务的安全性的。
+下文就来介绍 :ref:`WATCH` 的实现机制，并且看看事务系统是如何检查某个被监视的键是否被修改，从而保证事务的安全性的。
 
 
 WATCH 命令的实现
@@ -288,44 +337,60 @@ WATCH 命令的实现
 其中， 键 ``key1`` 正在被 ``client2`` 、 ``client5`` 和 ``client1`` 三个客户端监视，
 其他一些键也分别被其他别的客户端监视着。
 
-``WATCH`` 命令的作用，就是将当前客户端和要监视的键在 ``watched_keys`` 中进行关联。
-比如说，如果当前客户端为 ``client10086`` ，
-并且客户端执行 ``WATCH key1 key2`` ，
-那么上图所示的 ``watched_keys`` 将被修改成这个样子：
+:ref:`WATCH` 命令的作用，
+就是将当前客户端和要监视的键在 ``watched_keys`` 中进行关联。
+
+举个例子，
+如果当前客户端为 ``client10086`` ，
+那么当客户端执行 ``WATCH key1 key2`` 时，
+前面展示的 ``watched_keys`` 将被修改成这个样子：
 
 .. image:: image/new_watched_keys.png
 
-通过 ``watched_keys`` 字典，如果程序想检查某个键是否被监视，那么它只要检查字典中是否存在这个键即可；
-如果程序要获取监视某个键的所有客户端，那么只要取出键的值（一个链表），然后对链表进行遍历即可。
+通过 ``watched_keys`` 字典，
+如果程序想检查某个键是否被监视，
+那么它只要检查字典中是否存在这个键即可；
+如果程序要获取监视某个键的所有客户端，
+那么只要取出键的值（一个链表），
+然后对链表进行遍历即可。
+
 
 WATCH 的触发
 --------------
 
-在任何对数据库键空间（key space）进行修改的命令执行之后
-（比如 ``FLUSH`` 、 ``SET`` 、 ``DEL`` 、 ``LPUSH`` 、 ``SADD`` 、 ``ZREM`` ，诸如此类），
-``multi.c/touchWatchKey`` 函数都会被调用：
+在任何对数据库键空间（key space）进行修改的命令成功执行之后
+（比如 :ref:`FLUSHDB` 、 :ref:`SET` 、 :ref:`DEL` 、 :ref:`LPUSH` 、 :ref:`SADD` 、 :ref:`ZREM` ，诸如此类），
+``multi.c/touchWatchKey`` 函数都会被调用 —— 
 它检查数据库的 ``watched_keys`` 字典，
-看是否有客户端正在监视命令所处理的键，
+看是否有客户端在监视已经被命令修改的键，
 如果有的话，
 程序将所有监视这个/这些被修改键的客户端的 ``REDIS_DIRTY_CAS`` 选项打开：
 
 .. image:: image/dirty_cas.png
 
-当客户端发送 ``EXEC`` 命令、触发事务执行时，
+当客户端发送 :ref:`EXEC` 命令、触发事务执行时，
 服务器会对客户端的状态进行检查：
 
-- 如果客户端的 ``REDIS_DIRTY_CAS`` 选项已经被打开， 那么说明客户端监视的至少一个键已经被修改，事务的安全性已经被破坏。服务器会放弃执行这个事务，直接向客户端返回空回复，表示事务执行失败。
+- 如果客户端的 ``REDIS_DIRTY_CAS`` 选项已经被打开，那么说明被客户端监视的键至少有一个已经被修改了，事务的安全性已经被破坏。服务器会放弃执行这个事务，直接向客户端返回空回复，表示事务执行失败。
 
-- 如果 ``REDIS_DIRTY_CAS`` 选项没有被打开，那么说明所有监视键都安全，执行事务。
+- 如果 ``REDIS_DIRTY_CAS`` 选项没有被打开，那么说明所有监视键都安全，服务器正式执行事务。
 
 可以用一段伪代码来表示这个检查：
 
-::
+.. code-block:: python
 
-    if client_state && REDIS_DIRTY_CAS
-        return nil_bulk_reply
-    else
-        execute_transaction()
+    def check_safety_before_execute_trasaction():
+
+        if client.state && REDIS_DIRTY_CAS:
+            # 安全性已破坏，清除事务状态
+            clear_transaction_state(client)
+            # 清空事务队列
+            clear_transaction_queue(client)
+            # 返回空回复给客户端
+            send_empty_reply(client)
+        else
+            # 安全性完好，执行事务
+            execute_transaction()
 
 举个例子，假设数据库的 ``watched_keys`` 字典如下图所示：
 
@@ -334,17 +399,10 @@ WATCH 的触发
 如果某个客户端对 ``key1`` 进行了修改（比如执行 ``DEL key1`` ），
 那么所有监视 ``key1`` 的客户端，
 包括 ``client2`` 、 ``client5`` 和 ``client1`` 的 ``REDIS_DIRTY_CAS`` 选项都会被打开，
-当客户端 ``client2`` 、 ``client5`` 和 ``client1`` 执行 ``EXEC`` 的时候，它们的事务都会以失败告终。
+当客户端 ``client2`` 、 ``client5`` 和 ``client1`` 执行 :ref:`EXEC` 的时候，
+它们的事务都会以失败告终。
 
-以上就是带 ``WATCH`` 的事务在执行失败时的工作原理。
-
-另一方面，如果在 ``EXEC`` 触发事务执行的时候，
-客户端的 ``REDIS_DIRTY_CAS`` 未打开，
-那么表示监视的所有键都没有被修改，
-服务器可以放心地执行事务。
-事务中命令的执行方式，和前面介绍的不带 ``WATCH`` 命令的事务的执行方式一样。
-
-最后，当一个客户端结束它的事务时，无论事务是成功执行，还是失败， ``watched_keys`` 字典中该客户端相关的资料都会被清除。
+最后，当一个客户端结束它的事务时，无论事务是成功执行，还是失败， ``watched_keys`` 字典中和这个客户端相关的资料都会被清除。
 
 
 事务的 ACID 性质
@@ -362,9 +420,10 @@ Redis 事务保证了其中的一致性（C）和隔离性（I），但并不保
 单个 Redis 命令的执行是原子性的，但 Redis 没有在事务上增加任何维持原子性的机制，所以 Redis 事务的执行并不是原子性的。
 
 如果一个事务队列中的所有命令都被成功地执行，那么称这个事务执行成功。
+
 另一方面，如果 Redis 服务器进程在执行事务的过程中被停止 —— 比如接到 KILL 信号、宿主机器停机，等等，那么事务执行失败。
 
-当事务失败时，Redis 也不会进行任何的重试或者回滚操作。
+当事务失败时，Redis 也不会进行任何的重试或者回滚动作。
 
 一致性（Consistency）
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
