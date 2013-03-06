@@ -1,0 +1,20 @@
+digraph g {
+
+    rankdir = LR;
+
+    node [shape = record];
+
+    // nodes
+
+    redisServer [label = "redisServer | ... |<slowlog> slowlog | ... "];
+
+    slowlog_1 [label = "<head>slowlogEntry | argv | argc | id | duration | time"];
+    slowlog_2 [label = "<head>slowlogEntry | argv | argc | id | duration | time"];
+    slowlog_3 [label = "<head>slowlogEntry | argv | argc | id | duration | time"];
+
+    // edges
+
+    redisServer:slowlog -> slowlog_1;
+    slowlog_1 -> slowlog_2;
+    slowlog_2 -> slowlog_3;
+}
