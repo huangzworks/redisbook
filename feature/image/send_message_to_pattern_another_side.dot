@@ -1,0 +1,34 @@
+digraph pattern_relation {
+    
+    rankdir = BT;
+
+    kindle [label = "tweet.shop.kindle"];
+
+    ipad [label = "tweet.shop.ipad"];
+
+    node [shape = octagon];
+    pattern [label = "tweet.shop.*"];
+
+    pattern -> kindle [label = "match"];
+    pattern -> ipad [dir = back, style = dashed];
+
+    node [shape = box];
+
+    client123 -> pattern [label = "message", dir = back, style= dashed];
+    client256 -> pattern [label = "message", dir = back, style= dashed];
+
+    clientX -> kindle [label = "subscribe"];
+    clientY -> kindle [label = "subscribe"];
+
+    client3333 -> ipad [label = "message", dir = back, style= dashed];
+    client4444 -> ipad [label = "message", dir = back, style = dashed];
+    client5555 -> ipad [label = "message", dir = back, style = dashed];
+
+    // new
+
+    publish [label = "PUBLISH tweet.shop.ipad message", shape = plaintext];
+
+    ipad -> publish [dir = back, style = dashed];
+
+
+}

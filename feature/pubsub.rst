@@ -102,10 +102,11 @@ Redis 的 :ref:`SUBSCRIBE` 命令可以让客户端订阅任意数量的频道�
 退订频道
 ----------
 
-使用 ``UNSUBSCRIBE`` 命令可以退订指定的频道，
+使用 :ref:`UNSUBSCRIBE` 命令可以退订指定的频道，
 这个命令执行的是订阅的反操作：
 它从 ``pubsub_channels`` 字典的给定频道（键）中，
-删除关于当前客户端的信息。
+删除关于当前客户端的信息，
+这样被退订频道的信息就不会再发送给这个客户端。
 
 
 模式的订阅与信息发送
@@ -116,7 +117,7 @@ Redis 的 :ref:`SUBSCRIBE` 命令可以让客户端订阅任意数量的频道�
 如果有某个/某些模式和这个频道匹配的话，
 那么所有订阅这个/这些频道的客户端也同样会收到信息。
 
-以下是一个同时展示了频道和模式的例子，
+下图展示了一个带有频道和模式的例子，
 其中 ``tweet.shop.*`` 模式匹配了 ``tweet.shop.kindle`` 频道和 ``tweet.shop.ipad`` 频道，
 并且有不同的客户端分别订阅它们三个：
 
@@ -128,10 +129,12 @@ Redis 的 :ref:`SUBSCRIBE` 命令可以让客户端订阅任意数量的频道�
 
 .. image:: image/send_message_to_pattern.png
 
-因为模式只保存订阅者（客户端）的信息，
-它本身并不接受 :ref:`PUBLISH` 命令发送过来的信息、也不对信息进行任何转发，
-:ref:`PUBLISH` 命令的信息是直接发给订阅模式的客户端，而不是模式本身，
-所以图中从 ``tweet.shop.kindle`` 频道到 ``tweet.shop.*`` 模式之间的连接线并没有使用 ``message`` 标签。
+另一方面，
+如果接收到信息的是频道 ``tweet.shop.ipad`` ，
+那么 ``client123`` 和 ``client256`` 同样会收到信息：
+
+.. image:: image/send_message_to_pattern_another_side.png
+
 
 订阅模式
 -----------
@@ -224,10 +227,11 @@ Redis 的 :ref:`SUBSCRIBE` 命令可以让客户端订阅任意数量的频道�
 退订模式
 ----------
 
-使用 ``PUNSUBSCRIBE`` 命令可以退订指定的模式，
+使用 :ref:`PUNSUBSCRIBE` 命令可以退订指定的模式，
 这个命令执行的是订阅模式的反操作：
 程序会删除 ``redisServer.pubsub_patterns`` 链表中，
-所有和被退订模式相关联的 ``pubsubPattern`` 结构。
+所有和被退订模式相关联的 ``pubsubPattern`` 结构，
+这样客户端就不会再收到和模式相匹配的频道发来的信息。
 
 
 小结

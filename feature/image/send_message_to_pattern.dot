@@ -1,5 +1,15 @@
 digraph send_message_to_pattern {
-   
+  
+    // tweet.shop.ipad
+
+    ipad [label = "tweet.shop.ipad"];
+    ipad -> pattern [label = "match", dir = back];
+
+    node [shape = box];
+    ipad -> client3333 [label = "subscribe", dir = back];
+    ipad -> client4444 [label = "subscribe", dir = back];
+    ipad -> client5555 [label = "subscribe", dir = back];
+
     node [shape = plaintext];
     message [label = "PUBLISH tweet.shop.kindle message"];
 
