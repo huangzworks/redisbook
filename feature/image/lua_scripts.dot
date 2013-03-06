@@ -1,0 +1,17 @@
+digraph {
+
+    rankdir = LR;
+
+    node [shape = record];
+
+    sha1_table [label = "lua_scripts | ... |<53320> \"5332031c6b470dc5a0dd9b4bf2030dea6d65de91\" | <d1fd1> \"d1df1372d92f8e6fa0a2fd40c3baa73fe325f647\" | ... "];
+
+    53320 [label = "\"return 'hello world'\""];
+
+    d1fd1 [label = "\"return redis.call('DBSIZE')\""];
+
+    sha1_table:53320 -> 53320;
+
+    sha1_table:d1fd1 -> d1fd1;
+
+}
