@@ -2,27 +2,27 @@ digraph flush {
 
     node [shape = record];
 
-    F2_running_choice [label = "F2 正在执行？", shape = diamond];
+    SAVE_running_choice [label = "SAVE 正在执行？", shape = diamond];
 
     over_2_second_choice [label = "运行时间\n超过 2 秒？", shape = diamond];
 
-    not_over_2_second [label = "情况 1 ：\n函数直接返回\n 不执行 F1 或新的 F2"];
+    not_over_2_second [label = "情况 1 ：\n函数直接返回\n 不执行 WRITE 或\n新的 SAVE"];
 
-    over_2_second [label = "情况 2 ：\n执行 F1 \n 但不执行新的 F2 \n"];
+    over_2_second [label = "情况 2 ：\n执行 WRITE \n 但不执行新的 SAVE \n"];
 
-    F2_running_choice -> over_2_second_choice [label = "是"];
+    SAVE_running_choice -> over_2_second_choice [label = "是"];
 
     over_2_second_choice -> not_over_2_second [label = "否"];
 
     over_2_second_choice -> over_2_second [label = "是"];
 
-    finish_over_2_second [label = "距离上次 F2\n 执行成功\n超过 1 秒？", shape = diamond];
+    finish_over_2_second [label = "距离上次 SAVE\n 执行成功\n超过 1 秒？", shape = diamond];
 
-    no [label = "情况 3 ：\n 执行 F1 \n 但不执行新的 F2 "];
+    no [label = "情况 3 ：\n 执行 WRITE \n 但不执行新的 SAVE "];
 
-    yes [label = "情况 4 ：\n 执行 F1 和新的 F2\n"];
+    yes [label = "情况 4 ：\n 执行 WRITE 和\n新的 SAVE\n"];
 
-    F2_running_choice -> finish_over_2_second [label = "否"];
+    SAVE_running_choice -> finish_over_2_second [label = "否"];
 
     finish_over_2_second -> yes [label = "是"];
 
