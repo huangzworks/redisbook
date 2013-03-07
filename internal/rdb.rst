@@ -1,10 +1,10 @@
 RDB
 ========================
 
-在运行时，
+在运行情况下，
 Redis 以数据结构的形式将数据维持在内存中，
 为了让这些数据在 Redis 重启之后仍然可用，
-Redis 提供了 RDB 功能。
+Redis 分别提供了 RDB 和 AOF 两种\ `持久化 <http://en.wikipedia.org/wiki/Persistence_(computer_science)>`_\ 模式。
 
 在 Redis 运行时，
 RDB 程序将当前内存中的数据库快照保存到磁盘文件中，
@@ -17,8 +17,8 @@ RDB 功能最核心的是 ``rdbSave`` 和 ``rdbLoad`` 两个函数，
 
 .. image:: image/persistent.png
 
-本章先介绍 ``SAVE`` 和 ``BGSAVE`` 命令的实现，
-以及 ``rdbSave`` 和 ``rdbLoad`` 函数运行的情景，
+本章先介绍 :ref:`SAVE` 和 :ref:`BGSAVE` 命令的实现，
+以及 ``rdbSave`` 和 ``rdbLoad`` 两个函数的运行机制，
 然后以图表的方式，
 分部分来介绍 RDB 文件的组织形式。
 
@@ -37,13 +37,13 @@ RDB 功能最核心的是 ``rdbSave`` 和 ``rdbLoad`` 两个函数，
 主进程会被阻塞，
 直到保存完成为止。
 
-``SAVE`` 和 ``BGSAVE`` 两个命令都会调用这个函数，但它们调用的方式各有不同：
+:ref:`SAVE` 和 :ref:`BGSAVE` 两个命令都会调用 ``rdbSave`` 函数，但它们调用的方式各有不同：
 
-- ``SAVE`` 直接调用 ``rdbSave`` ，阻塞 Redis 主进程，直到保存完成为止。在主线程阻塞期间，它不能处理客户端的任何请求。
+- :ref:`SAVE` 直接调用 ``rdbSave`` ，阻塞 Redis 主进程，直到保存完成为止。在主进程阻塞期间，服务器不能处理客户端的任何请求。
 
-- ``BGSAVE`` 则 ``fork`` 出一个子进程，由子进程负责调用 ``rdbSave`` ，并在保存完成之后向主进程发送信号，通知保存已完成。因为 ``rdbSave`` 在子进程被调用，所以 Redis 主进程在 ``BGSAVE`` 执行期间仍然可以继续处理客户端的请求。
+- :ref:`BGSAVE` 则 ``fork`` 出一个子进程，子进程负责调用 ``rdbSave`` ，并在保存完成之后向主进程发送信号，通知保存已完成。因为 ``rdbSave`` 在子进程被调用，所以 Redis 服务器在 :ref:`BGSAVE` 执行期间仍然可以继续处理客户端的请求。
 
-通过用伪代码来描述这两个命令，可以很容易地看出它们之间的区别：
+通过伪代码来描述这两个命令，可以很容易地看出它们之间的区别：
 
 .. code-block:: python
 
@@ -57,12 +57,17 @@ RDB 功能最核心的是 ``rdbSave`` 和 ``rdbLoad`` 两个函数，
         pid = fork()
 
         if pid == 0:
+
             # 子进程保存 RDB 
             rdbSave()
+
         elif pid > 0:
+
             # 父进程继续处理请求，并等待子进程的完成信号
             handle_request()
+
         else:
+
             # pid == -1
             # 处理 fork 错误
             handle_fork_error()
@@ -82,46 +87,47 @@ SAVE
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 前面提到过，
-当 ``SAVE`` 执行时，
+当 :ref:`SAVE` 执行时，
 Redis 服务器是阻塞的，
-所以当 ``SAVE`` 正在执行时，
-新的 ``SAVE`` / ``BGSAVE`` / ``BGREWRITEAOF`` 调用都不会产生任何作用。
+所以当 :ref:`SAVE` 正在执行时，
+新的 :ref:`SAVE` 、 :ref:`BGSAVE` 或 :ref:`BGREWRITEAOF` 调用都不会产生任何作用。
 
-只有在上一个 ``SAVE`` 执行完毕、
+只有在上一个 :ref:`SAVE` 执行完毕、
 Redis 重新开始接受请求之后，
-新的 ``SAVE`` / ``BGSAVE`` / ``BGREWRITEAOF`` 命令才会被处理。
+新的 :ref:`SAVE` 、 :ref:`BGSAVE` 或 :ref:`BGREWRITEAOF` 命令才会被处理。
 
 另外，
 因为 AOF 写入由后台线程完成，
-而 ``BGREWRITEAOF`` 则由子进程完成，
-所以 ``SAVE`` 、 AOF 写入和 ``BGREWRITEAOF`` 可以同时执行。
+而 :ref:`BGREWRITEAOF` 则由子进程完成，
+所以在 :ref:`SAVE` 执行的过程中，
+AOF 写入和 :ref:`BGREWRITEAOF` 可以同时进行。
 
 BGSAVE 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-在执行 ``SAVE`` 命令之前，
-服务器会检查 ``BGSAVE`` 是否正在执行当中，
+在执行 :ref:`SAVE` 命令之前，
+服务器会检查 :ref:`BGSAVE` 是否正在执行当中，
 如果是的话，
 服务器就不调用 ``rdbSave`` ，
 而是向客户端返回一个出错信息，
-告知在 ``BGSAVE`` 执行期间，
-不能执行 ``SAVE`` 。
+告知在 :ref:`BGSAVE` 执行期间，
+不能执行 :ref:`SAVE` 。
 
-这样做可以避免 ``SAVE`` 和 ``BGSAVE`` 调用的两个 ``rdbSave`` 交叉执行，
+这样做可以避免 :ref:`SAVE` 和 :ref:`BGSAVE` 调用的两个 ``rdbSave`` 交叉执行，
 造成竞争条件。
 
 另一方面，
-当 ``BGSAVE`` 正在执行时，
-调用新 ``BGSAVE`` 命令的客户端会收到一个出错信息，
-告知 ``BGSAVE`` 已经在执行当中。
+当 :ref:`BGSAVE` 正在执行时，
+调用新 :ref:`BGSAVE` 命令的客户端会收到一个出错信息，
+告知 :ref:`BGSAVE` 已经在执行当中。
 
-``BGREWRITEAOF`` 和 ``BGSAVE`` 不能同时执行：
+:ref:`BGREWRITEAOF` 和 :ref:`BGSAVE` 不能同时执行：
 
-- 如果 ``BGSAVE`` 正在执行，那么 ``BGREWRITEAOF`` 的重写请求会被延迟到 ``BGSAVE`` 执行完毕之后进行，客户端会收到请求被延迟的回复；
+- 如果 :ref:`BGSAVE` 正在执行，那么 :ref:`BGREWRITEAOF` 的重写请求会被延迟到 :ref:`BGSAVE` 执行完毕之后进行，执行 :ref:`BGREWRITEAOF` 命令的客户端会收到请求被延迟的回复。
 
-- 如果 ``BGREWRITEAOF`` 正在执行，那么调用 ``BGSAVE`` 的客户端将收到出错信息，表示这两个命令不能同时执行。
+- 如果 :ref:`BGREWRITEAOF` 正在执行，那么调用 :ref:`BGSAVE` 的客户端将收到出错信息，表示这两个命令不能同时执行。
 
-``BGREWRITEAOF`` 和 ``BGSAVE`` 两个命令在操作方面并没有什么冲突的地方，
+:ref:`BGREWRITEAOF` 和 :ref:`BGSAVE` 两个命令在操作方面并没有什么冲突的地方，
 不能同时执行它们只是一个性能方面的考虑：
 并发出两个子进程，
 并且两个子进程都同时进行大量的磁盘写入操作，
@@ -152,10 +158,10 @@ AOF 文件中的数据会比 RDB 文件中的数据要新。
 
 因此，
 如果服务器在启动时，
-AOF 功能和 RDB 功能都被开启了，
-并且 AOF 文件和 RDB 文件同时存在，
-那么 Redis 服务器会优先使用 AOF 文件来还原数据库，
-而 RDB 文件则不会被用上。
+打开了 AOF 功能，
+那么程序优先使用 AOF 文件来还原数据。
+只有在 AOF 功能未打开的情况下，
+Redis 才会使用 RDB 文件来还原数据。
 
 
 RDB 文件结构
@@ -209,16 +215,15 @@ KEY-VALUE-PAIRS
 ``OPTIONAL-EXPIRE-TIME`` 域是可选的，如果键没有设置过期时间，那么这个域就不会出现；
 反之，如果这个域出现的话，那么它记录着键的过期时间，在当前版本的 RDB 中，过期时间是一个以毫秒为单位的 UNIX 时间戳。
 
-``TYPE-OF-VALUE`` 域记录着 ``VALUE`` 域的值的类型，
-根据这个域的指示，
-程序会使用不同的方式来保存 ``VALUE`` 的值。
-
 ``KEY`` 域保存着键，格式和 ``REDIS_ENCODING_RAW`` 编码的字符串对象一样（见下文）。
 
-根据 ``TYPE-OF-VALUE`` 的指示，
-``VALUE`` 域使用不同的格式来保存不同类型和不同编码的值，
-详细的格式如下：
+``TYPE-OF-VALUE`` 域记录着 ``VALUE`` 域的值所使用的编码，
+根据这个域的指示，
+程序会使用不同的方式来保存和读取 ``VALUE`` 的值。
 
+.. note:: 下文提到的编码在《\ :ref:`object_chapter`\ 》章节介绍过，如果忘记了可以回复重温下。
+
+保存 ``VALUE`` 的详细格式如下：
 
 - ``REDIS_ENCODING_INT`` 编码的 ``REDIS_STRING`` 类型对象：
 
@@ -231,6 +236,8 @@ KEY-VALUE-PAIRS
       +---------+
 
   比如说，整数 ``8`` 可以用 ``8`` 位序列 ``00001000`` 保存。
+
+  当读入这类值时，程序按指定的长度读入字节数据，然后将数据转换回整数类型。
 
   另一方面，如果值不能被表示为最高 ``32`` 位的有符号整数，那么说明这是一个 ``long long`` 类型的值，在 RDB 文件中，这种类型的值以字符序列的形式保存。
         
@@ -265,7 +272,7 @@ KEY-VALUE-PAIRS
 
      ``COMPRESSED-CONTENT`` 是被压缩后的数据， ``COMPRESSED-LEN`` 则是该数据的字节长度。
 
-  3. 在其他情况下，直接以普通字节序列的方式来保存字符串，也即是，对于一个长度为 ``20`` 字节的字符串，需要使用 ``20`` 字节的空间来保存它。
+  3. 在其他情况下，程序直接以普通字节序列的方式来保存字符串。比如说，对于一个长度为 ``20`` 字节的字符串，需要使用 ``20`` 字节的空间来保存它。
 
      这种字符串被保存为以下结构：
 
@@ -305,6 +312,8 @@ KEY-VALUE-PAIRS
       | SET-SIZE | ELEMENT-1 | ELEMENT-2 | ... | ELEMENT-N |
       +----------+-----------+-----------+-----+-----------+
 
+  ``SET-SIZE`` 记录了集合元素的数量，后面跟着多个元素值。元素值的保存方式和字符串的保存方式一样。
+
   载入时，读入器先读入集合元素的数量 ``SET-SIZE`` ，再连续读入 ``SET-SIZE`` 个字符串，并将这些字符串作为新元素添加至新创建的集合。
 
 
@@ -325,7 +334,7 @@ KEY-VALUE-PAIRS
   2. 读入字符串形式保存的 ``score`` ，并将它转换为浮点数
 
   3. 添加 ``member`` 为成员、 ``score`` 为分值的新元素到有序集
-
+    
 
 - ``REDIS_ENCODING_HT`` 编码的 ``REDIS_HASH`` 类型值保存为以下结构：
 
@@ -335,7 +344,9 @@ KEY-VALUE-PAIRS
       | HASH-SIZE | KEY-1 | VALUE-1 | KEY-2 | VALUE-2 | ... | KEY-N | VALUE-N |
       +-----------+-------+---------+-------+---------+-----+-------+---------+
 
-  载入时，程序先读入 ``HASH-SIZE`` ，再执行以下步骤 ``HASH-SIZE`` 次：
+  ``HASH-SIZE`` 是哈希表包含的键值对的数量， ``KEY-i`` 和 ``VALUE-i`` 分别是哈希表的键和值。
+
+  载入时，程序先创建一个新的哈希表，然后读入 ``HASH-SIZE`` ，再执行以下步骤 ``HASH-SIZE`` 次：
 
   1. 读入一个字符串
 
@@ -374,13 +385,15 @@ EOF
 CHECK-SUM
 ^^^^^^^^^^^
 
-前文以上所有内容的校验和，
-一个 ``uint_64t`` 类型值，
-如果为 ``0`` ，
-那么表示校验和已关闭，
-如果不为 ``0`` ，
-那么 REDIS 在写入时将校验和保存在 RDB 文件，
-当读取时，根据它对正文内容进行校验。
+RDB 文件所有内容的校验和，
+一个 ``uint_64t`` 类型值。
+
+REDIS 在写入 RDB 文件时将校验和保存在 RDB 文件的末尾，
+当读取时，
+根据它的值对内容进行校验。
+
+如果这个域的值为 ``0`` ，
+那么表示 Redis 关闭了校验和功能。
 
 
 小结
@@ -388,15 +401,15 @@ CHECK-SUM
 
 - ``rdbSave`` 会将数据库数据保存到 RDB 文件，并在保存完成之前阻塞调用者。
 
-- ``SAVE`` 命令直接调用 ``rdbSave`` ，阻塞 Redis 主线程； ``BGSAVE`` 用子进程调用 ``rdbSave`` ，主进程仍可继续处理命令请求。
+- :ref:`SAVE` 命令直接调用 ``rdbSave`` ，阻塞 Redis 主进程； :ref:`BGSAVE` 用子进程调用 ``rdbSave`` ，主进程仍可继续处理命令请求。
 
-- ``SAVE`` 执行期间， AOF 写入可以在后台线程进行， ``BGREWRITEAOF`` 可以在子进程进行。
+- :ref:`SAVE` 执行期间， AOF 写入可以在后台线程进行， :ref:`BGREWRITEAOF` 可以在子进程进行，所以这三种操作可以同时进行。
 
-- 为了避免产生竞争条件， ``BGSAVE`` 执行时， ``SAVE`` 命令不能执行。
+- 为了避免产生竞争条件， :ref:`BGSAVE` 执行时， :ref:`SAVE` 命令不能执行。
 
-- 为了避免性能问题， ``BGSAVE`` 和 ``BGREWRITEAOF`` 不能同时执行。
+- 为了避免性能问题， :ref:`BGSAVE` 和 :ref:`BGREWRITEAOF` 不能同时执行。
 
-- 调用 ``rdbLoad`` 函数载入 RDB 文件时，不能进行任何数据库相关操作，但是 pubsub 方面的命令可以正常运行，因为它们和数据库不相关联。
+- 调用 ``rdbLoad`` 函数载入 RDB 文件时，不能进行任何和数据库相关的操作，不过订阅与发布方面的命令可以正常执行，因为它们和数据库不相关联。
 
 - RDB 文件的组织方式如下：
 
