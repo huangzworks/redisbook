@@ -1,10 +1,11 @@
 digraph g {
 
-    node [shape = record];
+    edge [style = bold];
+    node [shape = plaintext, style = filled];
 
-    add [label = "添加新元素到 intset"];
+    add [label = "添加新元素到 intset", fillcolor = "#A8E270"];
 
-    upgrade_or_not [label = "intset 需要升级？", shape = diamond];
+    upgrade_or_not [label = "intset 需要升级？", shape = diamond, fillcolor = "#95BBE3"];
 
     add -> upgrade_or_not;
 

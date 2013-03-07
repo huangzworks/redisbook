@@ -1,19 +1,20 @@
 digraph intsetAdd {
 
-    node [shape=box];
+    node [shape=plaintext, style = filled];
 
-    start [label="intsetAdd"];
+    edge [style = bold];
 
-    check_encoding [label="集合当前的编码类型是否适用于新元素？"];
+    start [label="intsetAdd", fillcolor = "#A8E270"];
+
+    check_encoding [label="集合当前的编码类型\n是否适用于新元素？", shape = diamond, fillcolor = "#95BBE3"];
 
     start -> check_encoding;
 
-
-    upgrade [label="调用 intsetUpgradeAndAdd\n升级集合，并将新元素添加到升级后的集合中"];
+    upgrade [label="调用\n intsetUpgradeAndAdd\n升级集合\n并将新元素\n添加到升级后的集合中"];
 
     check_encoding -> upgrade [label="不适用"];
 
-    value_exists [label="元素已经存在于集合？"];
+    value_exists [label="元素已经存在于集合？", shape = diamond, fillcolor = "#95BBE3"];
 
     check_encoding -> value_exists [label="适用"];
 
