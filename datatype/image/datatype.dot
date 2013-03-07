@@ -2,13 +2,17 @@ digraph datatype {
 
     rankdir=LR;
 
-    node[shape=plaintext];
+    node[shape=plaintext, style = filled];
+
+    edge [style = bold];
 
     // obj
 
-    redisObject [label="redisObject"];
+    redisObject [label="redisObject", fillcolor = "#A8E270"];
 
     // type
+
+    node [fillcolor = "#95BBE3"];
 
     REDIS_STRING [label="字符串\nREDIS_STRING"];
     REDIS_LIST [label="列表\nREDIS_LIST"];
@@ -17,6 +21,8 @@ digraph datatype {
     REDIS_HASH [label="哈希表\nREDIS_HASH"];
 
     // encoding
+
+    node [fillcolor = "#FADCAD"];
 
     REDIS_ENCODING_RAW [label="字符串\nREDIS_ENCODING_RAW"];
     REDIS_ENCODING_INT [label="整数\nREDIS_ENCODING_INT"];

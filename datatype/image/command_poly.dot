@@ -1,17 +1,20 @@
 digraph command_poly {
-    node [shape=box];
 
-    lpop [label="LPOP key"];
+    node [shape=plaintext, style = filled];
+
+    edge [style = bold];
+
+    lpop [label="LPOP key", fillcolor = "#A8E270"];
 
     get_key_obj_from_db [label="Redis 从数据库中查找 key \n对应的 redisObject 结构"];
 
-    is_obj_nil_or_not [label="数据库返回 NULL ？",shape=diamond];
+    is_obj_nil_or_not [label="数据库返回 NULL ？",shape=diamond, fillcolor = "#95BBE3"];
 
     return_nil [label="key 不存在\n返回空回复"];
 
-    is_type_list_or_not [label="redisObject 的类型为\nREDIS_LIST ？",shape=diamond];
+    is_type_list_or_not [label="redisObject 的类型为\nREDIS_LIST ？",shape=diamond, fillcolor = "#95BBE3"];
 
-    call_poly_pop_function [label="调用多态 pop 函数", shape=diamond];
+    call_poly_pop_function [label="调用多态 pop 函数", shape=diamond, fillcolor = "#95BBE3"];
 
     return_type_error [label="key 不是列表\n返回类型错误"];
 

@@ -2,28 +2,32 @@ digraph shared_integer {
     
     // setting
     
-    node [shape = record];
+    node [shape = record, style = filled];
+
+    edge [style = bold];
 
     // list
 
-    list_a [label = "<head>列表A | 20130101 |<300> * | 10086 | -998 |<999> * |<1024> *"];
+    // list_a [label = "<head>列表A | 20130101 |<300> * | 10086 | -998 |<1024> *", fillcolor = "#A8E270"];
 
-    list_b [label = "列表B |<0> * | 12345678910 |<999> *"];
+    list_a [label = "<head>列表A | 20130101 |<300> * | 10086 ", fillcolor = "#A8E270"];
 
-    list_c [label = "列表C |<100> * |<0> * | -25 |<1024> *"];
+    list_b [label = "列表B |<81> * | 12345678910 |<999> *", fillcolor = "#95BBE3"];
 
-    sl [label = "<head>共享整数对象数组 |<0> 0 | ... |<100> 100 | ... |<300> 300 | ... |<999> 999 | ... |<1024> 1024 | ... | 10000 "];
+    list_c [label = "列表C |<100> * |<0> * | -25 |<123> *", fillcolor = "#FADCAD"];
+
+    sl [label = "<head>共享整数对象数组 |<0> 0 | ... |<81> 81| ... |<100> 100 |<123> 123 | ... |<300> 300 | ... |<999> 999 | ... | 10000 "];
 
     // edge
 
-    list_a:300 -> sl:300 [color=red];
-    list_a:999 -> sl:999 [color=red];
-    list_a:1024 -> sl:1024 [color=red];
+    list_a:300 -> sl:300 [color="#A8E270"];
+    //list_a:999 -> sl:999 [color="#A8E270"];
+    // list_a:1024 -> sl:1024 [color="#A8E270"];
 
-    list_b:0 -> sl:0 [color=blue];
-    list_b:999 -> sl:999 [color=blue];
+    list_b:81 -> sl:81 [color="#95BBE3"];
+    list_b:999 -> sl:999 [color="#95BBE3"];
 
-    list_c:100 -> sl:100;
-    list_c:0 -> sl:0;
-    list_c:1024 -> sl:1024;
+    list_c:100 -> sl:100 [color = "#FADCAD"];
+    list_c:0 -> sl:0 [color = "#FADCAD"];
+    list_c:123 -> sl:123 [color = "#FADCAD"];
 }
