@@ -1,22 +1,25 @@
 digraph bad_performance_hash {
 
     rankdir = LR;
-    node [shape=record];
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
 
     // bucket
 
-    bucket [label="bucket |<0> 0 |<1> 1 |<2> 2 |<3> 3 |<4> 4 |<5> 5 |<6> 6 |<7> 7"];
+    bucket [label="bucket |<0> 0 |<1> 1 |<2> 2 |<3> 3 |<4> 4 |<5> 5 |<6> 6 |<7> 7", fillcolor = "#F2F2F2"];
 
     // nodes
 
     node [height=.1];
 
     // node 0
-    node0 [label="Entry"];
-    node01 [label="Entry"];
-    node02 [label="Entry"];
-    node03 [label="Entry"];
-    node04 [label="Entry"];
+    node0 [label="Entry", fillcolor = "#FADCAD"];
+    node01 [label="Entry", fillcolor = "#FADCAD"];
+    node02 [label="Entry", fillcolor = "#FADCAD"];
+    node03 [label="Entry", fillcolor = "#FADCAD"];
+    node04 [label="Entry", fillcolor = "#FADCAD"];
     node05 [label="NULL", shape=plaintext];
 
     bucket:0 -> node0;
@@ -27,9 +30,9 @@ digraph bad_performance_hash {
     node04 -> node05;
 
     // node 1
-    node1 [label="Entry"];
-    node11 [label="Entry"];
-    node12 [label="Entry"];
+    node1 [label="Entry", fillcolor = "#FADCAD"];
+    node11 [label="Entry", fillcolor = "#FADCAD"];
+    node12 [label="Entry", fillcolor = "#FADCAD"];
     node13 [label="NULL", shape=plaintext];
 
     bucket:1 -> node1;
@@ -38,11 +41,11 @@ digraph bad_performance_hash {
     node12 -> node13;
 
     // node 2
-    node2 [label="Entry"];
-    node21 [label="Entry"];
-    node22 [label="Entry"];
-    node23 [label="Entry"];
-    node24 [label="Entry"];
+    node2 [label="Entry", fillcolor = "#FADCAD"];
+    node21 [label="Entry", fillcolor = "#FADCAD"];
+    node22 [label="Entry", fillcolor = "#FADCAD"];
+    node23 [label="Entry", fillcolor = "#FADCAD"];
+    node24 [label="Entry", fillcolor = "#FADCAD"];
     node25 [label="NULL", shape=plaintext];
 
     bucket:2 -> node2;
@@ -53,11 +56,11 @@ digraph bad_performance_hash {
     node24 -> node25;
 
     // node 3
-    node3 [label="Entry"];
-    node31 [label="Entry"];
-    node32 [label="Entry"];
-    node33 [label="Entry"];
-    node34 [label="Entry"];
+    node3 [label="Entry", fillcolor = "#FADCAD"];
+    node31 [label="Entry", fillcolor = "#FADCAD"];
+    node32 [label="Entry", fillcolor = "#FADCAD"];
+    node33 [label="Entry", fillcolor = "#FADCAD"];
+    node34 [label="Entry", fillcolor = "#FADCAD"];
     node35 [label="NULL", shape=plaintext];
 
     bucket:3 -> node3;
@@ -68,8 +71,8 @@ digraph bad_performance_hash {
     node34 -> node35;
 
     // node 4
-    node4 [label="Entry"];
-    node41 [label="Entry"];
+    node4 [label="Entry", fillcolor = "#FADCAD"];
+    node41 [label="Entry", fillcolor = "#FADCAD"];
     node42 [label="NULL", shape=plaintext];
 
     bucket:4 -> node4;
@@ -77,11 +80,11 @@ digraph bad_performance_hash {
     node41 -> node42;
 
     // node 5
-    node5 [label="Entry"];
-    node51 [label="Entry"];
-    node52 [label="Entry"];
-    node53 [label="Entry"];
-    node54 [label="Entry"];
+    node5 [label="Entry", fillcolor = "#FADCAD"];
+    node51 [label="Entry", fillcolor = "#FADCAD"];
+    node52 [label="Entry", fillcolor = "#FADCAD"];
+    node53 [label="Entry", fillcolor = "#FADCAD"];
+    node54 [label="Entry", fillcolor = "#FADCAD"];
     node55 [label="NULL", shape=plaintext];
 
     bucket:5 -> node5;
@@ -92,10 +95,10 @@ digraph bad_performance_hash {
     node54 -> node55;
 
     // node 6
-    node6 [label="Entry"];
-    node61 [label="Entry"];
-    node62 [label="Entry"];
-    node63 [label="Entry"];
+    node6 [label="Entry", fillcolor = "#FADCAD"];
+    node61 [label="Entry", fillcolor = "#FADCAD"];
+    node62 [label="Entry", fillcolor = "#FADCAD"];
+    node63 [label="Entry", fillcolor = "#FADCAD"];
     node64 [label="NULL", shape=plaintext];
 
 
@@ -106,11 +109,11 @@ digraph bad_performance_hash {
     node63 -> node64;
 
     // node 7
-    node7 [label="Entry"];
-    node71 [label="Entry"];
-    node72 [label="Entry"];
-    node73 [label="Entry"];
-    node74 [label="Entry"];
+    node7 [label="Entry", fillcolor = "#FADCAD"];
+    node71 [label="Entry", fillcolor = "#FADCAD"];
+    node72 [label="Entry", fillcolor = "#FADCAD"];
+    node73 [label="Entry", fillcolor = "#FADCAD"];
+    node74 [label="Entry", fillcolor = "#FADCAD"];
     node75 [label="NULL", shape=plaintext];
 
     bucket:7 -> node7;

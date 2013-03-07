@@ -1,10 +1,14 @@
 digraph dictAdd {
 
-    node[shape=box];
-    
-    start [label="dictAdd"];
+    node[shape=plaintext, style = filled];
 
-    key_exists_or_not [label="键已经存在？", shape=diamond];
+    edge [style = bold];
+
+    //
+
+    start [label="dictAdd", fillcolor = "#A8E270"];
+
+    key_exists_or_not [label="键已经存在？", shape=diamond, fillcolor = "#95BBE3"];
 
     start -> key_exists_or_not;
 
@@ -12,7 +16,7 @@ digraph dictAdd {
 
     key_exists_or_not -> return_null_if_key_exists [label="是"];
 
-    dict_empty_or_not [label="ht[0] 未分配任何空间？", shape=diamond];
+    dict_empty_or_not [label="ht[0]\n 未分配任何空间？", shape=diamond, fillcolor = "#95BBE3"];
 
     key_exists_or_not -> dict_empty_or_not [label="否"];
 
@@ -22,7 +26,7 @@ digraph dictAdd {
 
     init_hash_table_one -> need_rehash_or_not;
 
-    need_rehash_or_not [label="需要 rehash ？", shape=diamond];
+    need_rehash_or_not [label="需要 rehash ？", shape=diamond, fillcolor = "#95BBE3"];
 
     dict_empty_or_not -> need_rehash_or_not [label="否"];
 
@@ -32,7 +36,7 @@ digraph dictAdd {
 
     begin_incremental_rehash -> rehashing_or_not;
 
-    rehashing_or_not [label="rehash 正在进行中？", shape=diamond];
+    rehashing_or_not [label="rehash\n 正在进行中？", shape=diamond, fillcolor = "#95BBE3"];
 
     need_rehash_or_not -> rehashing_or_not [label="不需要，\n或者 rehash 正在进行"];
 

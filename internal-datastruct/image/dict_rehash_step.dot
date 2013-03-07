@@ -1,22 +1,26 @@
 digraph rehash_step {
 
+    node[shape=plaintext, style = filled];
+
+    edge [style = bold];
+
     // callers
 
-    dictAdd [shape=box, label="dictAdd"];
+    dictAdd [label="dictAdd", fillcolor = "#A8E270"];
 
-    dictFind [shape=box, label="dictFind"];
+    dictFind [label="dictFind", fillcolor = "#A8E270"];
 
-    dictDelete [shape=box, label="dictDelete"];
+    dictDelete [label="dictDelete", fillcolor = "#A8E270"];
 
-    dictGetRandomKey [shape=box, label="dictGetRandomKey"];
+    dictGetRandomKey [label="dictGetRandomKey", fillcolor = "#A8E270"];
 
     // rehash
 
-    rehashing_or_not [shape=diamond, label="正在进行 rehash ？"];
+    rehashing_or_not [shape=diamond, label="正在进行 rehash ？", fillcolor = "#95BBE3"];
 
-    _dictRehashStep [shape=box, label="_dictRehashStep"];
+    _dictRehashStep [label="_dictRehashStep", fillcolor = "#A8E270"];
 
-    one_index [shape=plaintext, label="将 ht[0] 第一个不为空索引上的所有节点迁移至 ht[1]"];
+    one_index [label="将 ht[0] 第一个不为空索引上的所有节点迁移至 ht[1]"];
 
     // edge
 

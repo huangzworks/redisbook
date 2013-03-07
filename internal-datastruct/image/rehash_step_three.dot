@@ -4,27 +4,29 @@ digraph rehash_step_three {
 
     rankdir = LR;
 
-    node[shape=record];
+    node[shape=record, style = filled];
+
+    edge [style = bold];
 
     // nodes
 
-    dict [label="dict | type | privdata |<ht> ht[2] | rehashidx: 3 | iterators"];
+    dict [label="dict | type | privdata |<ht> ht[2] | rehashidx: 3 | iterators", fillcolor = "#A8E270"];
 
-    ht0 [label="<dictht>dictht |<table> table | size: 4 | sizemask: 3 | used: 0"];
+    ht0 [label="<dictht>dictht |<table> table | size: 4 | sizemask: 3 | used: 0", fillcolor = "#95BBE3"];
 
-    ht1 [label="<dictht>dictht |<table> table | size: 8 | sizemask: 7 | used: 4"];
+    ht1 [label="<dictht>dictht |<table> table | size: 8 | sizemask: 7 | used: 4", fillcolor = "#95BBE3"];
 
-    bucket [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 "];
+    bucket [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 ", fillcolor = "#F2F2F2"];
 
-    bucket1 [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 |<table4> 4 |<table5> 5 |<table6> 6 |<table7> 7"];
+    bucket1 [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 |<table4> 4 |<table5> 5 |<table6> 6 |<table7> 7", fillcolor = "#F2F2F2"];
 
-    pair_1 [label="<head>dictEntry |{key1 | value1 |<next>next}"];
+    pair_1 [label="<head>dictEntry |{key1 | value1 |<next>next}", fillcolor = "#FFC1C1"];
 
-    pair_2 [label="<head>dictEntry |{key2 | value2 |<next>next}"];
+    pair_2 [label="<head>dictEntry |{key2 | value2 |<next>next}", fillcolor = "#FFC1C1"];
 
-    pair_3 [label="<head>dictEntry |{key3 | value3 |<next>next}"];
+    pair_3 [label="<head>dictEntry |{key3 | value3 |<next>next}", fillcolor = "#FFC1C1"];
 
-    pair_4 [label="<head>dictEntry |{key4 | value4 |<next>next}"];
+    pair_4 [label="<head>dictEntry |{key4 | value4 |<next>next}", fillcolor = "#FFC1C1"];
 
     // null for bucket 0
     null0 [label="NULL", shape=plaintext];

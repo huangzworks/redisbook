@@ -4,23 +4,25 @@ digraph hash_table_example {
 
     rankdir = LR;
 
-    node[shape=record];
+    node[shape=record, style = filled];
+
+    edge [style = bold];
 
     // nodes
 
-    dict [label="dict | type | privdata |<ht> ht[2] | rehashidx: -1 | iterators: 0"];
+    dict [label="dict | type | privdata |<ht> ht[2] | rehashidx: -1 | iterators: 0", fillcolor = "#A8E270"];
 
-    ht0 [label="<dictht>dictht |<table> table | size: 4 | sizemask: 3 | used: 3"];
+    ht0 [label="<dictht>dictht |<table> table | size: 4 | sizemask: 3 | used: 3", fillcolor = "#95BBE3"];
 
-    ht1 [label="<dictht>dictht |<table> table | size: 0 | sizemask: 0 | used: 0"];
+    ht1 [label="<dictht>dictht |<table> table | size: 0 | sizemask: 0 | used: 0", fillcolor = "#95BBE3"];
 
-    bucket [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 "];
+    bucket [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 ", fillcolor = "#F2F2F2"];
 
-    pair_1 [label="<head>dictEntry |{key1 | value1 |<next>next}"];
+    pair_1 [label="<head>dictEntry |{key1 | value1 |<next>next}", fillcolor = "#FADCAD"];
 
-    pair_2 [label="<head>dictEntry |{key2 | value2 |<next>next}"];
+    pair_2 [label="<head>dictEntry |{key2 | value2 |<next>next}", fillcolor = "#FADCAD"];
 
-    pair_3 [label="<head>dictEntry |{key3 | value3 |<next>next}"];
+    pair_3 [label="<head>dictEntry |{key3 | value3 |<next>next}", fillcolor = "#FADCAD"];
 
     null0 [label="NULL", shape=plaintext];
     null1 [label="NULL", shape=plaintext];
