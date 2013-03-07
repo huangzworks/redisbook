@@ -1,8 +1,8 @@
 digraph expire_check {
     
-    write_commands [label = "SET 、 LPUSH 、 SADD 。。。", shape = "plaintext"];
+    write_commands [label = "SET 、\n LPUSH 、\n SADD 、 \n 等等", shape = "plaintext"];
 
-    read_commands [label = "GET 、 LRANGE 、 SMEMBERS 。。。", shape = "plaintext"];
+    read_commands [label = "GET 、\n LRANGE 、\n SMEMBERS 、 \n 等等", shape = "plaintext"];
 
     expire_if_needed [label = "调用 expire_if_needed() \n 删除过期键", shape = box];
 
