@@ -1,11 +1,14 @@
 digraph zset {
     rankdir = LR;
-    node [shape = record];
 
-    skiplist [label ="<head>zskipNode\n(head) |<3> |<2> |<1> |<score>score\n NULL |<robj>robj\n NULL"];
-    six [label = "<head>zskipNode |<3> |<2> |<1> |<score>score\n 6 |<robj>robj\n x"];
-    ten [label = "<head>zskipNode | <1> |<score>score\n 10 |<robj>robj\n y"];
-    fiften [label = "<head>zskipNode |<3> |<2> |<1> |<score>score\n 15 |<robj>robj\n z"];
+    node [shape = record, style = filled];
+    
+    edge [style = bold];
+
+    skiplist [label ="<head>zskipNode\n(head) |<3> |<2> |<1> |<score>score\n NULL |<robj>robj\n NULL", fillcolor = "#F2F2F2"];
+    six [label = "<head>zskipNode |<3> |<2> |<1> |<score>score\n 6 |<robj>robj\n x", fillcolor = "#95BBE3"];
+    ten [label = "<head>zskipNode | <1> |<score>score\n 10 |<robj>robj\n y", fillcolor = "#95BBE3"];
+    fiften [label = "<head>zskipNode |<3> |<2> |<1> |<score>score\n 15 |<robj>robj\n z", fillcolor = "#95BBE3"];
 
     skiplist:3 -> six:3; 
     skiplist:2 -> six:2;
