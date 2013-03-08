@@ -185,7 +185,7 @@ Redis 还提供了一些同时对多个键值对进行处理的功能，
 
 本书由 `huangz <http://huangz.me/>`_ 编写。
 
-我在研究 Redis 源码并创作本书的过程中获得了极大的快乐，希望你阅读本书时也能有同感。
+我在研究 Redis 源码并创作本书的过程中获得了极大的快乐，希望你在阅读本书时也能有同感。
 
 评论、问题、意见或建议都可以发表在本书自带的 disqus 论坛里，
 也可以通过 `豆瓣 <http://www.douban.com/people/i_m_huangz/>`_ 或 `Twitter <https://twitter.com/huangz1990>`_ 联系我，
