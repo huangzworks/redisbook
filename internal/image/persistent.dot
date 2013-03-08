@@ -2,11 +2,13 @@ digraph persistent {
 
     rankdir = LR;
 
-    node [shape = circle];
+    node [shape = circle, style = filled];
 
-    redis_object [label = "内存中的\n数据对象"];
+    edge [style = bold];
 
-    rdb [label = "磁盘中的\nRDB文件"];
+    redis_object [label = "内存中的\n数据对象", fillcolor = "#A8E270"];
+
+    rdb [label = "磁盘中的\nRDB文件", fillcolor = "#95BBE3"];
 
     redis_object -> rdb [label = "rdbSave"];
 

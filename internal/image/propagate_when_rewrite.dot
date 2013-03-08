@@ -1,14 +1,20 @@
 digraph p {
 
-    client [label = "客户端"];
+    node [style = filled];
 
-    server [label = "服务器"];
+    edge [style = "bold, dashed"];
+
+    // 
+
+    client [label = "客户端", fillcolor = "#95BBE3"];
+
+    server [label = "服务器", fillcolor = "#A8E270"];
 
     client -> server [label = "命令请求"];
 
-    current_aof [label = "现有 AOF 文件", shape = record];
+    current_aof [label = "现有 AOF 文件", shape = box, fillcolor = "#FADCAD"];
 
-    aof_rewrite_buf [label = "AOF 重写缓存", shape = record];
+    aof_rewrite_buf [label = "AOF 重写缓存", shape = box, fillcolor = "#FADCAD"];
 
     server -> current_aof [label = "命令协议内容"];
 

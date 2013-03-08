@@ -2,33 +2,49 @@ digraph pattern_relation {
     
     rankdir = BT;
 
-    kindle [label = "tweet.shop.kindle"];
+    node [style = filled];
+    edge [style = bold];
 
-    ipad [label = "tweet.shop.ipad"];
+    kindle [label = "tweet.shop.kindle", fillcolor = "#A8E270"];
+
+    ipad [label = "tweet.shop.ipad", fillcolor = "#A8E270"];
 
     node [shape = octagon];
     pattern [label = "tweet.shop.*"];
 
     pattern -> kindle [label = "match"];
-    pattern -> ipad [dir = back, style = dashed];
+    pattern -> ipad [style = "bold, dashed", color = "#B22222", dir = back];
 
     node [shape = box];
 
-    client123 -> pattern [label = "message", dir = back, style= dashed];
-    client256 -> pattern [label = "message", dir = back, style= dashed];
+    client123 -> pattern [label = "message", dir = back, style= "bold, dashed", color = "#B22222"];
+    client256 -> pattern [label = "message", dir = back, style= "bold, dashed", color = "#B22222"];
 
     clientX -> kindle [label = "subscribe"];
     clientY -> kindle [label = "subscribe"];
 
-    client3333 -> ipad [label = "message", dir = back, style= dashed];
-    client4444 -> ipad [label = "message", dir = back, style = dashed];
-    client5555 -> ipad [label = "message", dir = back, style = dashed];
+    client3333 -> ipad [label = "message", style = "bold, dashed", color = "#B22222", dir = back];
+    client4444 -> ipad [label = "message", style = "bold, dashed", color = "#B22222", dir = back];
+    client5555 -> ipad [label = "message", style = "bold, dashed", color = "#B22222", dir = back];
 
     // new
 
-    publish [label = "PUBLISH tweet.shop.ipad message", shape = plaintext];
+    publish [label = "PUBLISH tweet.shop.ipad message", shape = plaintext, fillcolor = "#FADCAD"];
 
-    ipad -> publish [dir = back, style = dashed];
+    ipad -> publish [style = "bold, dashed", color = "#B22222", dir = back];
+
+    // client color
+
+    client123 [fillcolor = "#95BBE3"];
+    client256 [fillcolor = "#95BBE3"];
+
+    clientX [fillcolor = "#95BBE3"];
+    clientY [fillcolor = "#95BBE3"];
+
+    client3333 [fillcolor = "#95BBE3"];
+    client4444 [fillcolor = "#95BBE3"];
+    client5555 [fillcolor = "#95BBE3"];
+
 
 
 }

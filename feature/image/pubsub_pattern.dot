@@ -2,13 +2,15 @@ digraph publish_pattern {
     
     rankdir = LR;
 
-    node [shape = record];
+    node [shape = record, style = filled];
 
-    redisServer [label = "redisServer| ... |<pubsub_patterns> pubsub_patterns | ..."];
+    edge [style = bold];
 
-    pubsubPattern_1 [label = "pubsubPattern | client \n client123 | pattern \n tweet.shop.*"];
+    redisServer [label = "redisServer| ... |<pubsub_patterns> pubsub_patterns | ...", fillcolor = "#A8E270"];
 
-    pubsubPattern_2 [label = "pubsubPattern | client \n client256 | pattern \n tweet.shop.*"];
+    pubsubPattern_1 [label = "pubsubPattern | client \n client123 | pattern \n tweet.shop.*", fillcolor = "#95BBE3"];
+
+    pubsubPattern_2 [label = "pubsubPattern | client \n client256 | pattern \n tweet.shop.*", fillcolor = "#95BBE3"];
 
     redisServer:pubsub_patterns -> pubsubPattern_1;
     pubsubPattern_1 -> pubsubPattern_2;

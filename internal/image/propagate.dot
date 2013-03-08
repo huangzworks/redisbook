@@ -1,18 +1,22 @@
 digraph propagate {
 
+    node [shape = plaintext, style = filled];
+
+    edge [style = bold];
+
     // node 
 
-    exec [label = "命令执行成功", shape = box];
+    exec [label = "命令执行成功", fillcolor = "#FADCAD"];
 
-    aof_choice [label = "AOF\n 功能已打开？", shape = diamond];
+    aof_choice [label = "AOF\n 功能已打开？", shape = diamond, fillcolor = "#95BBE3"];
 
-    propagate_aof [label = "传播命令到 AOF 程序", shape = box];
+    propagate_aof [label = "传播命令到 AOF 程序", fillcolor = "#A8E270"];
 
-    replication_choice [label = "REPLICATION\n 功能已打开？", shape = diamond];
+    replication_choice [label = "REPLICATION\n 功能已打开？", shape = diamond, fillcolor = "#95BBE3"];
 
-    propagate_replication [label = "传播命令到 REPLICATION 程序", shape = box];
+    propagate_replication [label = "传播命令到 REPLICATION 程序", fillcolor = "#A8E270"];
 
-    remaind_jobs [label = "处理后续步骤：\n清理资源、\n等等", shape = box];
+    remaind_jobs [label = "处理后续步骤：\n清理资源、\n等等", fillcolor = "#FADCAD"];
 
     // edge
 

@@ -1,6 +1,8 @@
 digraph push_generic_command {
     
-    node [shape = record];
+    node [shape = plaintext, style = filled];
+
+    edge [style = bold];
 
     /*
     lpush [label = "LPUSH key value [value ...]"];
@@ -8,13 +10,13 @@ digraph push_generic_command {
     linsert [label = "LINSERT key BEFORE\|AFTER pivot value"];
     */
 
-    pushGenericCommand [label = "pushGenericCommand"];
+    pushGenericCommand [label = "pushGenericCommand", fillcolor = "#A8E270"];
 
-    key_wrong_type_or_not [label = "key 非空且不是列表？", shape = diamond];
+    key_wrong_type_or_not [label = "key 非空且不是列表？", shape = diamond, fillcolor = "#95BBE3"];
 
     return_wrong_type_error [label = "返回类型错误"];
 
-    key_empty_or_not [label = "key 为空？", shape = diamond];
+    key_empty_or_not [label = "key 为空？", shape = diamond, fillcolor = "#95BBE3"];
 
     // call_signal_list_as_ready [label = "调用 signalListAsReady"];
 

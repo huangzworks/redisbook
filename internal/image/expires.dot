@@ -2,13 +2,17 @@ digraph expires {
 
     rankdir = LR;
 
-    node [shape = record];
+    node [shape = record, style =filled];
 
-    redisDb [label = "redisDb | id | ... |<expires> expires | ..."];
+    edge [style = bold];
+
+    // node
+
+    redisDb [label = "redisDb | id | ... |<expires> expires | ...", fillcolor = "#A8E270"];
 
     // expires
 
-    expires [label = "<head>dict |<number>StringObject\n \"number\" | NULL |<book>StringObject\n \"book\" | NULL "];
+    expires [label = "<head>dict |<number>StringObject\n \"number\" | NULL |<book>StringObject\n \"book\" | NULL ", fillcolor = "#95BBE3"];
 
     expire_of_number [label = "<head>StringObject | 1360454400000 "];
 

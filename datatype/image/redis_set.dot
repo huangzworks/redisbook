@@ -1,15 +1,17 @@
 digraph redis_set {
     
-    node [shape=plaintext];
+    node [shape=plaintext, style = filled];
+
+    edge [style = bold];
 
     // type
 
-    REDIS_SET [label="集合\nREDIS_SET"];
+    REDIS_SET [label="集合\nREDIS_SET", fillcolor = "#95BBE3"];
 
     // encoding
 
-    REDIS_ENCODING_INTSET [label="intset\nREDIS_ENCODING_INTSET"];
-    REDIS_ENCODING_HT [label="字典\nREDIS_ENCODING_HT"];
+    REDIS_ENCODING_INTSET [label="intset\nREDIS_ENCODING_INTSET", fillcolor = "#FADCAD"];
+    REDIS_ENCODING_HT [label="字典\nREDIS_ENCODING_HT", fillcolor = "#FADCAD"];
 
     // edge
 

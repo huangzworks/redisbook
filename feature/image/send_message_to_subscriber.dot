@@ -1,16 +1,20 @@
 digraph send_message_to_subscriber {
     
-    message [label = "PUBLISH channel1 message", shape = plaintext];
+    node [style = filled];
 
-    message -> channel1 [style = dashed];
+    edge [style = "dashed, bold"];
+    
+    message [label = "PUBLISH channel1 message", shape = plaintext, fillcolor = "#FADCAD"];
 
-    channel1 [label = "channel1"];
+    message -> channel1 [color = "#B22222]"];
+
+    channel1 [label = "channel1", fillcolor = "#A8E270"];
 
     node [shape = box];
 
-    client2 [label = "client2"];
-    client5 [label = "client5"];
-    client1 [label = "client1"];
+    client2 [label = "client2", fillcolor = "#95BBE3"];
+    client5 [label = "client5", fillcolor = "#95BBE3"];
+    client1 [label = "client1", fillcolor = "#95BBE3"];
 
     /*
     client2 -> channel1 [label = "subscribe"];
@@ -18,7 +22,7 @@ digraph send_message_to_subscriber {
     client1 -> channel1 [label = "subscribe"];
     */
 
-    channel1 -> client2 [label = "message", style = dashed];
-    channel1 -> client5 [label = "message", style = dashed];
-    channel1 -> client1 [label = "message", style = dashed];
+    channel1 -> client2 [label = "message", color = "#B22222"];
+    channel1 -> client5 [label = "message", color = "#B22222"];
+    channel1 -> client1 [label = "message", color = "#B22222"];
 }

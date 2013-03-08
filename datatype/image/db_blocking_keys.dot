@@ -2,16 +2,18 @@ digraph db_blocking_keys {
 
     rankdir = LR;
 
-    node [shape = record];
+    node [shape = record, style = filled];
+
+    edge [style = bold];
 
     // keys
 
-    blocking_keys [label = "blocking_keys |<key1> key1 |<key2> key2 |<key3> key3 | ... |<keyN> keyN"];
+    blocking_keys [label = "blocking_keys |<key1> key1 |<key2> key2 |<key3> key3 | ... |<keyN> keyN", fillcolor = "#A8E270"];
 
     // clients blocking for key1
-    client1 [label = "client1"];
-    client5 [label = "client5"];
-    client2 [label = "client2"];
+    client1 [label = "client1", fillcolor = "#95BBE3"];
+    client5 [label = "client5", fillcolor = "#95BBE3"];
+    client2 [label = "client2", fillcolor = "#95BBE3"];
     null_1 [label = "NULL", shape=plaintext];
     
     blocking_keys:key1 -> client2;
@@ -20,7 +22,7 @@ digraph db_blocking_keys {
     client1 -> null_1;
 
     // clients blocking for key2
-    client7 [label = "client7"];
+    client7 [label = "client7", fillcolor = "#95BBE3"];
     null_2 [label = "NULL", shape=plaintext];
 
     blocking_keys:key2 -> client7;
@@ -28,9 +30,9 @@ digraph db_blocking_keys {
 
     // key3
 
-    client3 [label = "client3"];
-    client4 [label = "client4"];
-    client6 [label = "client6"];
+    client3 [label = "client3", fillcolor = "#95BBE3"];
+    client4 [label = "client4", fillcolor = "#95BBE3"];
+    client6 [label = "client6", fillcolor = "#95BBE3"];
     null_3 [label = "NULL", shape=plaintext];
 
     blocking_keys:key3 -> client3;

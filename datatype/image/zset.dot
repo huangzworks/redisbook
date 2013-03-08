@@ -1,6 +1,10 @@
 digraph zset {
+
     rankdir = LR;
-    node [shape = record];
+
+    node [shape = record, style = filled];
+
+    edge [style = bold];
 
     label = "在实际中，字典和跳跃表通过指针来共享元素的 member 和 score\n图中对每个元素都重复显示了一遍，只是为了展示的方便";
 
@@ -8,10 +12,10 @@ digraph zset {
 
     // skiplist
 
-    skiplist [label ="<head>zskipNode |<3> |<2> |<1> |<score>score\n NULL |<robj>robj\n NULL"];
-    six [label = "<head>zskipNode |<3> |<2> |<1> |<score>score\n 6 |<robj>robj\n x"];
-    ten [label = "<head>zskipNode | <1> |<score>score\n 10 |<robj>robj\n y"];
-    fiften [label = "<head>zskipNode |<3> |<2> |<1> |<score>score\n 15 |<robj>robj\n z"];
+    skiplist [label ="<head>zskipNode |<3> |<2> |<1> |<score>score\n NULL |<robj>robj\n NULL", fillcolor = "#FADCAD"];
+    six [label = "<head>zskipNode |<3> |<2> |<1> |<score>score\n 6 |<robj>robj\n x", fillcolor = "#FADCAD"];
+    ten [label = "<head>zskipNode | <1> |<score>score\n 10 |<robj>robj\n y", fillcolor = "#FADCAD"];
+    fiften [label = "<head>zskipNode |<3> |<2> |<1> |<score>score\n 15 |<robj>robj\n z", fillcolor = "#FADCAD"];
 
     zset:dict -> dict:head;
     zset:zskiplist -> skiplist:head;
@@ -26,11 +30,11 @@ digraph zset {
 
     // dict
 
-    dict [label = "<head>dict | ... |<table> table | ..."];
-    bucket [label = "<head>dictEntry**\n(bucket) |<0> 0 |<1> 1 |<2> 2"];
-    entry_x [label = "<head>dictEntry |{<key>key\n x |<value>value\n 6}"];
-    entry_y [label = "<head>dictEntry |{<key>key\n y |<value>value\n 10}"];
-    entry_z [label = "<head>dictEntry |{<key>key\n z |<value>value\n 15}"];
+    dict [label = "<head>dict | ... |<table> table | ...", fillcolor = "#A8E270"];
+    bucket [label = "<head>dictEntry**\n(bucket) |<0> 0 |<1> 1 |<2> 2", fillcolor = "#95BBE3"];
+    entry_x [label = "<head>dictEntry |{<key>key\n x |<value>value\n 6}", fillcolor = "#F2F2F2"];
+    entry_y [label = "<head>dictEntry |{<key>key\n y |<value>value\n 10}", fillcolor = "#F2F2F2"];
+    entry_z [label = "<head>dictEntry |{<key>key\n z |<value>value\n 15}", fillcolor = "#F2F2F2"];
 
     dict:table -> bucket:head;
 

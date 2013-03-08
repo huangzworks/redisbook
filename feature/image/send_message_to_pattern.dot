@@ -1,8 +1,11 @@
 digraph send_message_to_pattern {
   
+    node [style = filled];
+    edge [style = bold];
+
     // tweet.shop.ipad
 
-    ipad [label = "tweet.shop.ipad"];
+    ipad [label = "tweet.shop.ipad", fillcolor = "#A8E270"];
     ipad -> pattern [label = "match", dir = back];
 
     node [shape = box];
@@ -11,19 +14,32 @@ digraph send_message_to_pattern {
     ipad -> client5555 [label = "subscribe", dir = back];
 
     node [shape = plaintext];
-    message [label = "PUBLISH tweet.shop.kindle message"];
+    message [label = "PUBLISH tweet.shop.kindle message", fillcolor = "#FADCAD"];
 
-    kindle [label = "tweet.shop.kindle", shape = ellipse];
+    kindle [label = "tweet.shop.kindle", shape = ellipse, fillcolor = "#A8E270"];
     pattern [label = "tweet.shop.*", shape = octagon];
 
-    message -> kindle [style = dashed];
-    kindle -> pattern [style = dashed];
+    message -> kindle [style = "bold, dashed", color = "#B22222"];
+    kindle -> pattern [style = "bold, dashed", color = "#B22222"];
 
     node [shape = box];
-    kindle -> clientX [style = dashed, label = "message"];
-    kindle -> clientY [style = dashed, label = "message"];
+    kindle -> clientX [style = "bold, dashed", color = "#B22222", label = "message"];
+    kindle -> clientY [style = "bold, dashed", color = "#B22222", label = "message"];
 
-    pattern -> client123 [style = dashed, label = "message"];
-    pattern -> client256 [style = dashed, label = "message"];
+    pattern -> client123 [label = "message", style = "bold, dashed", color = "#B22222"];
+    pattern -> client256 [label = "message", style = "bold, dashed", color = "#B22222"];
+
+    // client color
+
+    client123 [fillcolor = "#95BBE3"];
+    client256 [fillcolor = "#95BBE3"];
+
+    clientX [fillcolor = "#95BBE3"];
+    clientY [fillcolor = "#95BBE3"];
+
+    client3333 [fillcolor = "#95BBE3"];
+    client4444 [fillcolor = "#95BBE3"];
+    client5555 [fillcolor = "#95BBE3"];
+
 
 }

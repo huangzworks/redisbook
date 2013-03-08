@@ -1,12 +1,16 @@
 digraph update_ready_keys {
+
     rankdir = LR;
-    node [shape = record];
 
-    redisServer [label = "redisServer | ... |<ready_keys> ready_keys | ..."];
+    node [shape = record, style = filled];
 
-    readyList [label = "<head>readyList |<db> db |<key> key"];
+    edge [style = bold];
 
-    listNode [label = "<head>listNode |{<prev> prev |<next> next |<value> value} "];
+    redisServer [label = "redisServer | ... |<ready_keys> ready_keys | ...", fillcolor = "#A8E270"];
+
+    readyList [label = "<head>readyList |<db> db |<key> key", fillcolor = "#95BBE3"];
+
+    listNode [label = "<head>listNode |{<prev> prev |<next> next |<value> value} ", fillcolor = "#FADCAD"];
 
     null [label = "NULL", shape = plaintext];
 
@@ -15,10 +19,10 @@ digraph update_ready_keys {
     listNode:prev -> null;
     listNode:value -> readyList:head;
     
-    redisDb [label = "<head> redisDb | ... |<dict> dict | ..."];
+    redisDb [label = "<head> redisDb | ... |<dict> dict | ...", fillcolor = "#FFC1C1"];
     readyList:db -> redisDb:head;
 
-    dict [label = "<head>dict\n(key space of DB) | ... |<key3> key3 | ..."];
+    dict [label = "<head>dict\n(key space of DB) | ... |<key3> key3 | ...", fillcolor = "#F2F2F2"];
     redisDb:dict -> dict:head;
 
     readyList:key -> dict:key3;

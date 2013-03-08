@@ -4,19 +4,21 @@ digraph hash_table_example {
 
     rankdir = LR;
 
-    node[shape=record];
+    node[shape=record, style = filled];
+
+    edge [style = bold];
 
     // nodes
 
-    ht1 [label="<dictht>dictht |<table> table | size:4 | sizemask:3 | used:3"];
+    ht1 [label="<dictht>dictht |<table> table | size:4 | sizemask:3 | used:3", fillcolor = "#A8E270"];
 
-    bucket [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 "];
+    bucket [label="<head>dictEntry**\n(bucket) |<table0> 0 |<table1> 1 |<table2> 2 |<table3> 3 ", fillcolor = "#95BBE3"];
 
-    pair_1 [label="<head>dictEntry |{<key>key\nelem1 |<value>value\nNULL |<next>next\nNULL}"];
+    pair_1 [label="<head>dictEntry |{<key>key\nelem1 |<value>value\nNULL |<next>next\nNULL}", fillcolor = "#FADCAD"];
 
-    pair_2 [label="<head>dictEntry |{<key>key\nelem2 |<value>value\nNULL |<next>next\nNULL}"];
+    pair_2 [label="<head>dictEntry |{<key>key\nelem2 |<value>value\nNULL |<next>next\nNULL}", fillcolor = "#FADCAD"];
 
-    pair_3 [label="<head>dictEntry |{<key>key\nelem3 |<value>value\nNULL |<next>next\nNULL}"];
+    pair_3 [label="<head>dictEntry |{<key>key\nelem3 |<value>value\nNULL |<next>next\nNULL}", fillcolor = "#FADCAD"];
 
     null1 [label="NULL", shape=plaintext];
 

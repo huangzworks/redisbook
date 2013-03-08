@@ -2,13 +2,15 @@ digraph db {
 
     rankdir = LR;
 
-    node [shape = record];
+    node [shape = record, style = filled];
 
-    dict [label = "<head>dict\n |<number>StringObject\n \"number\" | NULL |<book>StringObject\n \"book\" |<message>StringObject\n \"message\""];
+    edge [style = bold];
 
-    number [label = "<head>ListObject | { 123 | 456 | 789 }"];
+    dict [label = "<head>dict\n |<number>StringObject\n \"number\" | NULL |<book>StringObject\n \"book\" |<message>StringObject\n \"message\"", fillcolor = "#A8E270"];
 
-    book [label = "<head>HashObject |<name>StringObject\n \"name\" |<author>StringObject\n \"author\" |<publisher>StringObject\n \"publisher\""];
+    number [label = "<head>ListObject | { 123 | 456 | 789 }", fillcolor = "#FADCAD"];
+
+    book [label = "<head>HashObject |<name>StringObject\n \"name\" |<author>StringObject\n \"author\" |<publisher>StringObject\n \"publisher\"", fillcolor = "#95BBE3"];
 
     book_name [label = "<head>StringObject | \"Mastering C++ in 21 days\""];
     book_author [label = "<head>StringObject | \"Someone\""];

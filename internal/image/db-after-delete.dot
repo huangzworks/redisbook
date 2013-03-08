@@ -2,19 +2,25 @@ digraph db {
 
     rankdir = LR;
 
-    node [shape = record];
+    node [shape = record, style = filled];
 
-    redisDb [label = "redisDb | id |<dict> dict | ..."];
+    edge [style = bold];
 
-    dict [label = "<head>dict\n(key space) |<number>StringObject\n \"number\" | NULL |<book>StringObject\n \"book\" | NULL "];
+    // node
 
-    number [label = "<head>ListObject | { 123 | 456 | 789 }"];
+    redisDb [label = "redisDb | id |<dict> dict | ...", fillcolor = "#A8E270"];
 
-    book [label = "<head>HashObject |<name>StringObject\n \"name\" |<author>StringObject\n \"author\" |<publisher>StringObject\n \"publisher\""];
+    dict [label = "<head>dict\n(key space) |<number>StringObject\n \"number\" | NULL |<book>StringObject\n \"book\" | NULL", fillcolor = "#FFC1C1"];
+
+    number [label = "<head>ListObject | { 123 | 456 | 789 }", fillcolor = "#FADCAD"];
+
+    book [label = "<head>HashObject |<name>StringObject\n \"name\" |<author>StringObject\n \"author\" |<publisher>StringObject\n \"publisher\"", fillcolor = "#F2F2F2"];
 
     book_name [label = "<head>StringObject | \"Mastering C++ in 21 days\""];
     book_author [label = "<head>StringObject | \"Someone\""];
     book_publisher [label = "<head>StringObject | \"Oh-Really? Publisher\""];
+
+    // edge
 
     redisDb:dict -> dict:head;
 

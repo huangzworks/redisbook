@@ -1,12 +1,20 @@
 digraph expire_check {
     
-    write_commands [label = "SET 、\n LPUSH 、\n SADD 、 \n 等等", shape = "plaintext"];
+    node [style = filled, shape = plaintext];
 
-    read_commands [label = "GET 、\n LRANGE 、\n SMEMBERS 、 \n 等等", shape = "plaintext"];
+    edge [style = bold];
 
-    expire_if_needed [label = "调用 expire_if_needed() \n 删除过期键", shape = box];
+    // node
+
+    write_commands [label = "SET 、\n LPUSH 、\n SADD 、 \n 等等", fillcolor = "#FADCAD"];
+
+    read_commands [label = "GET 、\n LRANGE 、\n SMEMBERS 、 \n 等等", fillcolor = "#FADCAD"];
+
+    expire_if_needed [label = "调用 expire_if_needed() \n 删除过期键", shape = box, fillcolor = "#A8E270"];
 
     process [label = "执行实际的命令流程"];
+
+    // edge
 
     write_commands -> expire_if_needed [label = "写请求"];
 

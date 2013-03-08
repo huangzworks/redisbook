@@ -2,9 +2,13 @@ digraph pubsub_relation {
 
     rankdir = BT;
 
-    channel1 [label = "channel1"];
+    node [style = filled];
 
-    node [shape = box];
+    edge [style = bold];
+
+    channel1 [label = "channel1", fillcolor = "#A8E270"];
+
+    node [shape = box, fillcolor = "#95BBE3"];
 
     client2 [label = "client2"];
     client5 [label = "client5"];
