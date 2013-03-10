@@ -191,6 +191,8 @@ Redis 还提供了一些同时对多个键值对进行处理的功能，
 也可以通过 `豆瓣 <http://www.douban.com/people/i_m_huangz/>`_ 或 `Twitter <https://twitter.com/huangz1990>`_ 联系我，
 我会尽可能地回复。
 
+要获得本书的最新动态，请关注 `redisbook <https://github.com/huangz1990/redisbook>`_ 项目。
+
 
 通过捐款支持本书
 -------------------
