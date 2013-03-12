@@ -588,7 +588,7 @@ dictRehashMilliseconds
 当 Redis 的服务器常规任务执行时，
 ``dictRehashMilliseconds`` 会被执行，
 在规定的时间内，
-尽可能地对数据库字典中那些需要 rehahs 的字典进行 rehash ，
+尽可能地对数据库字典中那些需要 rehash 的字典进行 rehash ，
 从而加速数据库字典的 rehash 进程（progress）。
 
 其他措施
