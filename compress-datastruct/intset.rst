@@ -369,9 +369,9 @@ intset 运行实例
 读取
 ^^^^^^^^
 
-有两种方式读取 ``intset`` 的元素，一种是 ``_intsetSet`` ，另一种是 ``intsetSearch`` ：
+有两种方式读取 ``intset`` 的元素，一种是 ``_intsetGet`` ，另一种是 ``intsetSearch`` ：
 
-- ``_intsetSet`` 接受一个给定的索引 ``pos`` ，并根据 ``intset->encoding`` 的值进行指针运算，计算出给定索引在 ``intset->contents`` 数组上的值。
+- ``_intsetGet`` 接受一个给定的索引 ``pos`` ，并根据 ``intset->encoding`` 的值进行指针运算，计算出给定索引在 ``intset->contents`` 数组上的值。
 
 - ``intsetSearch`` 则使用\ `二分查找 <http://en.wikipedia.org/wiki/Binary_search_algorithm>`_\ 算法，判断一个给定元素在 ``contents`` 数组上的索引。
 
