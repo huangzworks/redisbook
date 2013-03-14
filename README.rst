@@ -24,4 +24,8 @@
 
 - coderbee：https://github.com/huangz1990/redisbook/commit/20ee93fdc483a0ffe76154495b6e56f57ffde74e
 
-- shenchenhs：https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829050701
+- shenchenhs：
+    
+    - https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829050701
+
+    - https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829079413
