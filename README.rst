@@ -29,3 +29,5 @@
     - https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829050701
 
     - https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829079413
+
+- 王超： http://www.redisbook.com/en/latest/feature/transaction.html#comment-830849132
