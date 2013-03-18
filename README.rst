@@ -31,3 +31,5 @@
     - https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829079413
 
 - 王超： http://www.redisbook.com/en/latest/feature/transaction.html#comment-830849132
+
+- disqus_YBOaGxxUSD： http://www.redisbook.com/en/latest/feature/pubsub.html#comment-833341938
