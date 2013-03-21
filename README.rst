@@ -22,7 +22,11 @@
 
     - https://github.com/huangz1990/redisbook/commit/deb9b1ffc9928a8fdc55f5928b1e9da711302604
 
-- coderbee：https://github.com/huangz1990/redisbook/commit/20ee93fdc483a0ffe76154495b6e56f57ffde74e
+- coderbee：
+
+    - https://github.com/huangz1990/redisbook/commit/20ee93fdc483a0ffe76154495b6e56f57ffde74e
+
+    - http://www.redisbook.com/en/latest/internal/rdb.html#comment-829903931
 
 - shenchenhs：
     
@@ -38,10 +42,8 @@
 
 - Hardy Simpson：
 
-  - http://www.redisbook.com/en/latest/feature/transaction.html#comment-831264796
+    - http://www.redisbook.com/en/latest/feature/transaction.html#comment-831264796
 
-  - http://www.redisbook.com/en/latest/internal-datastruct/sds.html#comment-830179461
+    - http://www.redisbook.com/en/latest/internal-datastruct/sds.html#comment-830179461
 
 - lifecoder： http://www.redisbook.com/en/latest/internal-datastruct/dict.html#comment-829921706
-
-- coderbee： http://www.redisbook.com/en/latest/internal/rdb.html#comment-829903931
