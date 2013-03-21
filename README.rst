@@ -33,3 +33,15 @@
 - 王超： http://www.redisbook.com/en/latest/feature/transaction.html#comment-830849132
 
 - disqus_YBOaGxxUSD： http://www.redisbook.com/en/latest/feature/pubsub.html#comment-833341938
+
+- `hongliuliao <https://github.com/hongliuliao>`_ ：https://github.com/huangz1990/annotated_redis_source/issues/3
+
+- Hardy Simpson：
+
+  - http://www.redisbook.com/en/latest/feature/transaction.html#comment-831264796
+
+  - http://www.redisbook.com/en/latest/internal-datastruct/sds.html#comment-830179461
+
+- lifecoder： http://www.redisbook.com/en/latest/internal-datastruct/dict.html#comment-829921706
+
+- coderbee： http://www.redisbook.com/en/latest/internal/rdb.html#comment-829903931
