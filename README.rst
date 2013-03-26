@@ -47,3 +47,5 @@
     - http://www.redisbook.com/en/latest/internal-datastruct/sds.html#comment-830179461
 
 - lifecoder： http://www.redisbook.com/en/latest/internal-datastruct/dict.html#comment-829921706
+
+- 许成东： http://www.redisbook.com/en/latest/internal/aof.html#comment-842272424
