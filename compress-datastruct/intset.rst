@@ -81,12 +81,12 @@ Intset 是集合键的底层实现之一，如果一个集合：
 ====================== =========================== ========================
 创建 intset             ``intsetNew``               :math:`\theta(1)`
 删除 intset             无                          无
-添加新元素（不升级）    ``intsetAdd``               :math:`O(n)`
-添加新元素（升级）      ``intsetUpgradeAndAdd``     :math:`O(n)`
+添加新元素（不升级）    ``intsetAdd``               :math:`O(N)`
+添加新元素（升级）      ``intsetUpgradeAndAdd``     :math:`O(N)`
 按索引获取元素          ``_intsetGet``              :math:`\theta(1)`               
 按索引设置元素          ``_intsetSet``              :math:`\theta(1)`
-查找元素，返回索引      ``intsetSearch``            :math:`O(\lg n)`
-删除元素                ``intsetRemove``            :math:`O(n)`
+查找元素，返回索引      ``intsetSearch``            :math:`O(\lg N)`
+删除元素                ``intsetRemove``            :math:`O(N)`
 ====================== =========================== ========================
 
 
@@ -358,7 +358,7 @@ intset 运行实例
 还出现其他对 ``contents`` 数组内容进行增删的操作上，
 比如 ``intsetAdd`` 和 ``intsetRemove`` ，
 因为这种移动操作需要处理 intset 中的所有元素，
-所以这些函数的复杂度都不低于 :math:`O(n)` 。
+所以这些函数的复杂度都不低于 :math:`O(N)` 。
 
 
 其他操作
