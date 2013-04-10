@@ -2,19 +2,18 @@
 
 def sdiff_1(*multi_set):
 
-    result = set()
+    result = multi_set[0].copy()
 
-    # 按基数排序集合
-    sorted_multi_set = sorted(multi_set, lambda x, y: len(x) - len(y))
+    sorted_multi_set = sorted(multi_set[1:], lambda x, y: len(x) - len(y))
 
-    for elem in sorted_multi_set[0]:
-        exists = False
-        for s in sorted_multi_set[1:]:
+    # 当 elem 存在于除 multi_set[0] 之外的集合时
+    # 将 elem 从 result 中删除
+    for elem in multi_set[0]:
+
+        for s in sorted_multi_set:
+
             if elem in s:
-                exists = True
+                result.remove(elem)
                 break
-        # 只有当元素 elem 不存在于其他集合时
-        # 才将它加入到结果集
-        if not exists: result.add(elem)
 
     return result
