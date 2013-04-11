@@ -58,4 +58,8 @@
 
 - `袁茁 <https://github.com/yzprofile>`_ ： https://github.com/huangz1990/redisbook/pull/10
 
-- Vincent：http://www.redisbook.com/en/latest/datatype/set.html#comment-858178830
+- Vincent：
+
+    - http://www.redisbook.com/en/latest/datatype/set.html#comment-858178830
+
+    - http://www.redisbook.com/en/latest/datatype/set.html#comment-858176965
