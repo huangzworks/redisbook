@@ -53,7 +53,7 @@
 
 - 哈希表中某个键或某个值的长度大于 ``server.hash_max_ziplist_value`` （默认值为 ``64`` ）。
 
-- 压缩列表中的节点数量大于 ``server.hash_max_ziplist_value`` （默认值为 ``512`` ）。
+- 压缩列表中的节点数量大于 ``server.hash_max_ziplist_entries`` （默认值为 ``512`` ）。
 
 
 哈希命令的实现
