@@ -441,7 +441,7 @@ Redis 目前使用两种不同的哈希算法：
     数据库里的哈希类型键也是一个字典，
     当 Redis 使用子进程对数据库执行后台持久化任务时（比如执行 ``BGSAVE`` 或 ``BGREWRITEAOF`` 时），
     为了最大化地利用系统的 `copy on write <http://en.wikipedia.org/wiki/Copy-on-write>`_ 机制，
-    程序会会暂时将 ``dict_can_resize`` 设为假，
+    程序会暂时将 ``dict_can_resize`` 设为假，
     避免执行自然 rehash ，
     从而减少程序对内存的触碰（touch）。
 
