@@ -193,6 +193,8 @@ Redis 还提供了一些同时对多个键值对进行处理的功能，
 
 要获得本书的最新动态，请关注 `redisbook <https://github.com/huangz1990/redisbook>`_ 项目。
 
+要了解编写本书时用到的工具（源码管理、文档的生成和托管、图片生成，等等），请阅读 `这篇文章 <http://www.huangz.me/en/latest/diary/2013/tools-for-writing-redisbook.html>`_ 。
+
 
 通过捐款支持本书
 -------------------
