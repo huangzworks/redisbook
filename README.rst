@@ -67,3 +67,5 @@
 - rockxsj：http://www.redisbook.com/en/latest/datatype/hash.html#comment-860448434
 
 - jabari：http://www.redisbook.com/en/latest/compress-datastruct/ziplist.html#comment-860554408
+
+- yifang：http://www.redisbook.com/en/latest/internal-datastruct/skiplist.html#comment-864867431
