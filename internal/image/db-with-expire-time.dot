@@ -40,9 +40,9 @@ digraph db_with_expire_time {
 
     expires [label = "<head>dict |<number>StringObject\n \"number\" | NULL |<book>StringObject\n \"book\" | NULL ", fillcolor = "#95BBE3"];
 
-    expire_of_number [label = "<head>StringObject | 1360454400000 "];
+    expire_of_number [label = "<head>long long | 1360454400000 "];
 
-    expire_of_book [label = "<head>StringObject | 1360800000000 "];
+    expire_of_book [label = "<head>long long | 1360800000000 "];
 
     // expires edge
 
