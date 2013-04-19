@@ -433,8 +433,30 @@ Redis 的一致性问题可以分为三部分来讨论：入队错误、执行�
 入队错误
 """""""""""""
 
-在命令入队的过程中，如果客户端向服务器发送错误的命令，那么服务器只会向客户端返回一个错误，
-错误的命令不会被入队，它也不会影响已入队的命令，所以它不会影响事务的一致性。
+在命令入队的过程中，如果客户端向服务器发送了错误的命令，比如命令的参数数量不对，等等，
+那么服务器将向客户端返回一个出错信息，
+并且将客户端的事务状态设为 ``REDIS_DIRTY_EXEC`` 。
+
+当客户端执行 :ref:`EXEC` 命令时，
+Redis 会拒绝执行状态为 ``REDIS_DIRTY_EXEC`` 的事务，
+并返回失败信息。
+
+::
+
+    redis 127.0.0.1:6379> MULTI
+    OK
+
+    redis 127.0.0.1:6379> set key
+    (error) ERR wrong number of arguments for 'set' command
+
+    redis 127.0.0.1:6379> EXISTS key
+    QUEUED
+
+    redis 127.0.0.1:6379> EXEC
+    (error) EXECABORT Transaction discarded because of previous errors.
+
+因此，带有不正确入队命令的事务不会被执行，也不会影响数据库的一致性。
+
 
 执行错误
 """"""""""""""
