@@ -64,8 +64,14 @@
 
     - http://www.redisbook.com/en/latest/datatype/set.html#comment-858176965
 
+    - http://www.redisbook.com/en/latest/internal/db.html#comment-890402119
+
 - rockxsj：http://www.redisbook.com/en/latest/datatype/hash.html#comment-860448434
 
-- jabari：http://www.redisbook.com/en/latest/compress-datastruct/ziplist.html#comment-860554408
+- jabari：
+
+    - http://www.redisbook.com/en/latest/compress-datastruct/ziplist.html#comment-860554408
+
+    - http://www.redisbook.com/en/latest/internal/aof.html#comment-877666176
 
 - yifang：http://www.redisbook.com/en/latest/internal-datastruct/skiplist.html#comment-864867431
