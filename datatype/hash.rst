@@ -6,7 +6,7 @@
 ``REDIS_HASH`` （哈希表）是 :ref:`HSET` 、 :ref:`HLEN` 等命令的操作对象，
 它使用 ``REDIS_ENCODING_ZIPLIST`` 和 ``REDIS_ENCODING_HT`` 两种编码方式：
 
-.. image:: image/redis_hash.png
+.. graphviz:: image/redis_hash.dot
 
 
 字典编码的哈希表
@@ -20,7 +20,7 @@
 
 下图展示了一个包含三个键值对的哈希表：
 
-.. image:: image/dict_hash.png
+.. graphviz:: image/dict_hash.dot
 
 
 压缩列表编码的哈希表

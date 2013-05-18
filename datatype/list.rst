@@ -6,7 +6,7 @@
 ``REDIS_LIST`` （列表）是 :ref:`LPUSH` 、 :ref:`LRANGE` 等命令的操作对象，
 它使用 ``REDIS_ENCODING_ZIPLIST`` 和 ``REDIS_ENCODING_LINKEDLIST`` 这两种方式编码：
 
-.. image:: image/redis_list.png
+.. graphviz:: image/redis_list.dot
 
 
 编码的选择
@@ -47,7 +47,7 @@
 
 作为例子，以下流程图展示了 :ref:`BLPOP` 决定是否对客户端进行阻塞过程：
 
-.. image:: image/blpop_decide_block_or_not.png
+.. graphviz:: image/blpop_decide_block_or_not.dot
 
 
 阻塞
@@ -71,7 +71,7 @@
 链表里保存了所有因为这个键而被阻塞的客户端
 （被同一个键所阻塞的客户端可能不止一个）：
 
-.. image:: image/db_blocking_keys.png
+.. graphviz:: image/db_blocking_keys.dot
 
 在上图展示的 ``blocking_keys`` 例子中， ``client2`` 、 ``client5`` 和 ``client1`` 三个客户端就正被 ``key1`` 阻塞，
 而其他几个客户端也正在被别的两个 key 阻塞。
@@ -98,7 +98,7 @@
 在底层都由一个 ``pushGenericCommand`` 的函数实现，
 这个函数的运作流程如下图：
 
-.. image:: image/push_generic_command.png
+.. graphviz:: image/push_generic_command.dot
 
 当向一个空键推入新元素时，
 ``pushGenericCommand`` 函数执行以下两件事：
@@ -122,14 +122,14 @@
 假设某个非阻塞客户端正在使用 ``0`` 号数据库，
 而这个数据库当前的 ``blocking_keys`` 属性的值如下：
 
-.. image:: image/db_blocking_keys.png
+.. graphviz:: image/db_blocking_keys.dot
 
 如果这时客户端对该数据库执行 ``PUSH key3 value`` ，
 那么 ``pushGenericCommand`` 将创建一个 ``db`` 属性指向 ``0`` 号数据库、
 ``key`` 属性指向 ``key3`` 键对象的 ``readyList`` 结构 ，
 并将它添加到服务器 ``server.ready_keys`` 属性的链表中：
 
-.. image:: image/update_ready_keys.png
+.. graphviz:: image/update_ready_keys.dot
 
 在我们这个例子中，
 到目前为止，
@@ -211,7 +211,7 @@ Redis 文档称这种模式为先阻塞先服务（FBFS，first-block-first-serv
 那么 ``client3`` 和 ``client4`` 的阻塞都会被取消，
 而客户端 ``client6`` 依然处于阻塞状态：
 
-.. image:: image/db_blocking_keys.png
+.. graphviz:: image/db_blocking_keys.dot
 
 
 阻塞因超过最大等待时间而被取消

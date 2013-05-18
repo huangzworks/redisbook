@@ -25,7 +25,7 @@
 其他类型的整数、小数和字符串，
 都是用 ``sdshdr`` 结构来保存。
 
-.. image:: image/redis_string.png
+.. graphviz:: image/redis_string.dot
 
 
 编码的选择
