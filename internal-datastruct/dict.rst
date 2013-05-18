@@ -276,13 +276,13 @@ Redis 选择了高效且实现简单的哈希表作为字典的底层实现。
 下图展示了一个由 ``dictht`` 和数个 ``dictEntry`` 组成的哈希表例子：
 
 
-.. image:: image/hash_table_example.png
+.. graphviz:: image/hash_table_example.dot
 
 
 如果再加上之前列出的 ``dict`` 类型，那么整个字典结构可以表示如下：
 
 
-.. image:: image/dict_example.png
+.. graphviz:: image/dict_example.dot
 
 在上图的字典示例中，
 字典虽然创建了两个哈希表，
@@ -316,7 +316,7 @@ Redis 目前使用两种不同的哈希算法：
 
 ``d`` 的值可以用图片表示如下：
 
-.. image:: image/empty_dict.png
+.. graphviz:: image/empty_dict.dot
 
 新创建的两个哈希表都没有为 ``table`` 属性分配任何空间：
 
@@ -342,7 +342,7 @@ Redis 目前使用两种不同的哈希算法：
 整个添加流程可以用下图表示：
 
 
-.. image:: image/dictAdd.png
+.. graphviz:: image/dictAdd.dot
 
 
 在接下来的三节中，
@@ -367,11 +367,11 @@ Redis 目前使用两种不同的哈希算法：
 
 以下是字典空白时的样子：
 
-.. image:: image/empty_dict.png
+.. graphviz:: image/empty_dict.dot
 
 以下是往空白字典添加了第一个键值对之后的样子：
 
-.. image:: image/add_first_entry_to_empty_dict.png
+.. graphviz:: image/add_first_entry_to_empty_dict.dot
 
 
 添加新键值对时发生碰撞处理
@@ -388,7 +388,7 @@ Redis 目前使用两种不同的哈希算法：
 
 假设现在有一个带有三个节点的哈希表，如下图：
 
-.. image:: image/before_key_collision.png
+.. graphviz:: image/before_key_collision.dot
 
 对于一个新的键值对 ``key4`` 和 ``value4`` ，
 如果 ``key4`` 的哈希值和 ``key1`` 的哈希值相同，
@@ -397,7 +397,7 @@ Redis 目前使用两种不同的哈希算法：
 通过将 ``key4-value4`` 和 ``key1-value1`` 两个键值对用链表连接起来，
 就可以解决碰撞的问题：
 
-.. image:: image/after_key_collision.png
+.. graphviz:: image/after_key_collision.dot
 
 
 添加新键值对时触发了 rehash 操作
@@ -414,12 +414,12 @@ Redis 目前使用两种不同的哈希算法：
 对于下面这个哈希表，
 平均每次失败查找只需要访问 1 个节点（非空节点访问 2 次，空节点访问 1 次）：
 
-.. image:: image/good_performance_hash.png 
+.. graphviz:: image/good_performance_hash.dot 
 
 而对于下面这个哈希表，
 平均每次失败查找需要访问 5 个节点：
 
-.. image:: image/bad_performance_hash.png
+.. graphviz:: image/bad_performance_hash.dot
 
 为了在字典的键值对不断增多的情况下保持良好的性能，
 字典需要对所使用的哈希表（\ ``ht[0]``\ ）进行 rehash 操作：
@@ -484,7 +484,7 @@ Rehash 执行过程
 
 这时的字典是这个样子：
 
-.. image:: image/rehash_step_one.png
+.. graphviz:: image/rehash_step_one.dot
 
 
 2. Rehash 进行中
@@ -496,7 +496,7 @@ Rehash 执行过程
 
 以下是 ``rehashidx`` 值为 ``2`` 时，字典的样子：
 
-.. image:: image/rehash_step_two.png
+.. graphviz:: image/rehash_step_two.dot
 
 注意除了节点的移动外，
 字典的 ``rehashidx`` 、 ``ht[0]->used`` 和 ``ht[1]->used`` 三个属性也产生了变化。
@@ -507,7 +507,7 @@ Rehash 执行过程
 
 到了这个阶段，所有的节点都已经从 ``ht[0]`` 迁移到 ``ht[1]`` 了：
 
-.. image:: image/rehash_step_three.png
+.. graphviz:: image/rehash_step_three.dot
 
 
 4. Rehash 完毕
@@ -525,7 +525,7 @@ Rehash 执行过程
 
 以下是字典 rehash 完毕之后的样子：
 
-.. image:: image/rehash_step_four.png
+.. graphviz:: image/rehash_step_four.dot
 
 对比字典 rehash 之前和 rehash 之后，
 新的 ``ht[0]`` 空间更大，
@@ -572,7 +572,7 @@ _dictRehashStep
 每次执行一次添加、查找、删除操作，
 ``_dictRehashStep`` 都会被执行一次：
 
-.. image:: image/dict_rehash_step.png
+.. graphviz:: image/dict_rehash_step.dot
 
 因为字典会保持哈希表大小和节点数的比率在一个很小的范围内，
 所以每个索引上的节点数量不会很多（从目前版本的 rehash 条件来看，平均只有一个，最多通常也不会超过五个），
