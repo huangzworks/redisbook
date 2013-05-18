@@ -15,7 +15,7 @@ RDB 功能最核心的是 ``rdbSave`` 和 ``rdbLoad`` 两个函数，
 前者用于生成 RDB 文件到磁盘，
 而后者则用于将 RDB 文件中的数据重新载入到内存中：
 
-.. image:: image/persistent.png
+.. graphviz:: image/persistent.dot
 
 本章先介绍 :ref:`SAVE` 和 :ref:`BGSAVE` 命令的实现，
 以及 ``rdbSave`` 和 ``rdbLoad`` 两个函数的运行机制，

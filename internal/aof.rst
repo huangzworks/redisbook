@@ -7,7 +7,7 @@ Redis 分别提供了 RDB 和 AOF 两种持久化机制：
 
 - AOF 则以协议文本的方式，将所有对数据库进行过写入的命令（及其参数）记录到 AOF 文件，以此达到记录数据库状态的目的。
 
-.. image:: image/aof.png
+.. graphviz:: image/aof.dot
 
 本章首先介绍 AOF 功能的运作机制，
 了解命令是如何被保存到 AOF 文件里的，
@@ -174,7 +174,7 @@ Redis 将客户端的命令指针指向实现 :ref:`SET` 命令的 ``setCommand`
 
 以下是该过程的流程图：
 
-.. image:: image/propagate.png
+.. graphviz:: image/propagate.dot
 
 
 缓存追加
@@ -298,7 +298,7 @@ SAVE 原则上每隔一秒钟就会执行一次，
 
 可以用流程图表示这四种情况：
 
-.. image:: image/flush.png
+.. graphviz:: image/flush.dot
 
 根据以上说明可以知道，
 在“每一秒钟保存一次”模式下，
@@ -686,7 +686,7 @@ Redis 主进程在接到新的写命令之后，
 除了会将这个写命令的协议内容追加到现有的 AOF 文件之外，
 还会追加到这个缓存中：
 
-.. image:: image/propagate_when_rewrite.png
+.. graphviz:: image/propagate_when_rewrite.dot
 
 换言之，
 当子进程在执行 AOF 重写时，
