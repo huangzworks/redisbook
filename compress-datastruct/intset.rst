@@ -135,7 +135,7 @@ intset 运行实例
 
 整个 ``intsetAdd`` 的执行流程可以表示为下图：
 
-.. image:: image/intsetAdd.png
+.. graphviz:: image/intsetAdd.dot
 
 以下两个小节分别演示添加操作在升级和不升级两种情况下的执行过程。
 
@@ -223,7 +223,7 @@ intset 运行实例
 
 在添加新元素时，如果 ``intsetAdd`` 发现新元素不能用现有的编码方式来保存，它就会将升级集合和添加新元素的任务转交给 ``intsetUpgradeAndAdd`` 来完成：
 
-.. image:: image/intset-add-upgrade.png
+.. graphviz:: image/intset-add-upgrade.dot
 
 ``intsetUpgradeAndAdd`` 需要完成以下几个任务：
 
