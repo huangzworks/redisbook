@@ -27,6 +27,9 @@ import sys, os
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = ['sphinx.ext.mathjax', 'sphinx.ext.intersphinx', 'sphinx.ext.graphviz']
 
+graphviz_output_format = 'svg'
+graphviz_dot_args = ["-Nfontname='/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc'"]
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
