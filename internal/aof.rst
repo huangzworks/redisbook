@@ -629,18 +629,22 @@ AOF 重写并不需要对原有的 AOF 文件进行任何写入和读取，
 
           # 用 HMSET key field1 value1 field2 value2 ... fieldN valueN 命令来保存哈希键
 
-          field1, value1, field2, value2, ..., fieldN, valueN = get_field_and_value_from_hash(key)
+          field1, value1, field2, value2, ..., fieldN, valueN =\
+          get_field_and_value_from_hash(key)
 
-          f.write_command("HMSET " + key + field1 + value1 + field2 + value2 + ... + fieldN + valueN)
+          f.write_command("HMSET " + key + field1 + value1 + field2 + value2 +\
+                          ... + fieldN + valueN)
 
         elif key.type == SortedSet:
 
-          # 用 ZADD key score1 member1 score2 member2 ... scoreN memberN 命令来保存有序集键
+          # 用 ZADD key score1 member1 score2 member2 ... scoreN memberN 
+          # 命令来保存有序集键
 
           score1, member1, score2, member2, ..., scoreN, memberN = \ 
           get_score_and_member_from_sorted_set(key)
 
-          f.write_command("ZADD " + key + score1 + member1 + score2 + member2 + ... + scoreN + memberN)
+          f.write_command("ZADD " + key + score1 + member1 + score2 + member2 +\
+                          ... + scoreN + memberN)
               
         else:
 
