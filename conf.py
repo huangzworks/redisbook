@@ -186,6 +186,7 @@ latex_elements = {
     \setCJKsansfont{WenQuanYi Zen Hei}
     \setCJKmonofont{WenQuanYi Zen Hei Mono}
     \usepackage{tabularx}
+    \setcounter{tocdepth}{2}
 """,
 }
 
