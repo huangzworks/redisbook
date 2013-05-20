@@ -600,42 +600,24 @@ AOF 重写
 数据库空间的收缩和扩展
 ------------------------
 
-在《\ :ref:`dict_chapter`\ 》一章里有提到过，
-当字典已有节点的数量和字典大小之间的比率超过 1:1 、并且 rehash 功能被打开时，
-字典会自动扩展自己的大小。
+因为数据库空间是由字典来实现的，
+所以数据库空间的扩展/收缩规则和字典的扩展/收缩规则完全一样，
+具体的信息可以参考《\ :ref:`dict_chapter`\ 》章节。
 
-数据库的 ``dict`` 字典和 ``expires`` 字典也遵循这一扩展规则，
-并且扩展过程也是通过字典的渐进式扩展来进行。
-不过，
-字典模块本身并没有定义应该在何时对字典进行收缩操作 —— 
-它将收缩操作执行的时机交给调用者程序决定。
+因为对字典进行收缩的时机是由使用字典的程序决定的，
+所以 Redis 使用 ``redis.c/tryResizeHashTables`` 函数来检查数据库所使用的字典是否需要进行收缩：
+每次 ``redis.c/serverCron`` 函数运行的时候，
+这个函数都会被调用。
 
-对于数据库来说，
-收缩的规则由 ``redis.c/htNeedResize`` 函数定义：
-当字典的节点填充百分比小于 ``redis.h/REDIS_HT_MINFILL`` 时，
-字典的大小会被缩小为大于等于已使用节点数。
-
-节点填充百分比可以用公式 ``fill_percent = used_node_number * 100 / dict_size`` 来计算，
-其中，
-``used_node_number`` 为字典目前已有的节点数量，
-而 ``dict_size`` 则为字典的可用节点数量。
-
-``REDIS_HT_MINFILL`` 常量在当前版本中的值为 ``10`` ，
-也即是说，
-当字典的节点填充百分比低于 10% 时，
-字典就会被缩小，
-新字典的可用节点数大于等于 ``used_node_number`` 。
-
-最后，检查字典是否需要缩小的工作由 ``redis.c/tryResizeHashTables`` 函数完成，
-每次 ``serverCron`` 函数运行的时候，
-它都会被调用。
-
-这个函数的完整定义如下：
+``tryResizeHashTables`` 函数的完整定义如下：
 
 ::
 
     /*
-     * 如果字典的节点填充百分比低于 REDIS_HT_MINFILL 
+     * 对服务器中的所有数据库键空间字典、以及过期时间字典进行检查，
+     * 看是否需要对这些字典进行收缩。
+     *
+     * 如果字典的使用空间比率低于 REDIS_HT_MINFILL 
      * 那么将字典的大小缩小，让 USED/BUCKETS 的比率 <= 1
      */
     void tryResizeHashTables(void) {
@@ -643,11 +625,11 @@ AOF 重写
 
         for (j = 0; j < server.dbnum; j++) {
 
-            // 缩小 key space
+            // 缩小键空间字典
             if (htNeedsResize(server.db[j].dict))
                 dictResize(server.db[j].dict);
 
-            // 缩小 expire space
+            // 缩小过期时间字典
             if (htNeedsResize(server.db[j].expires))
                 dictResize(server.db[j].expires);
         }
