@@ -80,7 +80,7 @@ Redis 是一个键值对数据库，
 后面的《\ :ref:`db_chapter`\ 》一章会对键空间以及数据库的实现作详细的介绍，
 到时我们将看到，
 大部分针对数据库的命令，
-比如 :ref:`DBSIZE` 、 :ref:`FLUSHDB` 、:ref:`RANDOMKEY` ，
+比如 :ref:`DBSIZE` 、 :ref:`FLUSHDB` 、 :ref:`RANDOMKEY` ，
 等等，
 都是构建于对字典的操作之上的；
 而那些创建、更新、删除和查找键值对的命令，
