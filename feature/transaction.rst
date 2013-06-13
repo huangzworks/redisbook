@@ -74,7 +74,7 @@ Redis 通过 :ref:`MULTI` 、 :ref:`DISCARD` 、 :ref:`EXEC` 和 :ref:`WATCH` �
 将客户端的 ``REDIS_MULTI`` 选项打开，
 让客户端从非事务状态切换到事务状态。
 
-.. image:: image/non_transaction_to_transaction.png
+.. graphviz:: image/non_transaction_to_transaction.dot
 
 
 命令入队
@@ -113,7 +113,7 @@ Redis 通过 :ref:`MULTI` 、 :ref:`DISCARD` 、 :ref:`EXEC` 和 :ref:`WATCH` �
 
 以下流程图展示了这一行为：
 
-.. image:: image/enqueue.png
+.. graphviz:: image/enqueue.dot
 
 事务队列是一个数组，
 每个数组项是都包含三个属性：
@@ -161,7 +161,7 @@ Redis 通过 :ref:`MULTI` 、 :ref:`DISCARD` 、 :ref:`EXEC` 和 :ref:`WATCH` �
 它们会像客户端处于非事务状态一样，
 直接被服务器执行：
 
-.. image:: image/not_enque_command.png
+.. graphviz:: image/not_enque_command.dot
 
 如果客户端正处于事务状态，
 那么当 :ref:`EXEC` 命令执行时，
@@ -332,7 +332,7 @@ WATCH 命令的实现
 
 比如说，以下字典就展示了一个 ``watched_keys`` 字典的例子：
 
-.. image:: image/watched_keys.png
+.. graphviz:: image/watched_keys.dot
 
 其中， 键 ``key1`` 正在被 ``client2`` 、 ``client5`` 和 ``client1`` 三个客户端监视，
 其他一些键也分别被其他别的客户端监视着。
@@ -345,7 +345,7 @@ WATCH 命令的实现
 那么当客户端执行 ``WATCH key1 key2`` 时，
 前面展示的 ``watched_keys`` 将被修改成这个样子：
 
-.. image:: image/new_watched_keys.png
+.. graphviz:: image/new_watched_keys.dot
 
 通过 ``watched_keys`` 字典，
 如果程序想检查某个键是否被监视，
@@ -366,7 +366,7 @@ WATCH 的触发
 如果有的话，
 程序将所有监视这个/这些被修改键的客户端的 ``REDIS_DIRTY_CAS`` 选项打开：
 
-.. image:: image/dirty_cas.png
+.. graphviz:: image/dirty_cas.dot
 
 当客户端发送 :ref:`EXEC` 命令、触发事务执行时，
 服务器会对客户端的状态进行检查：
@@ -394,7 +394,7 @@ WATCH 的触发
 
 举个例子，假设数据库的 ``watched_keys`` 字典如下图所示：
 
-.. image:: image/watched_keys.png
+.. graphviz:: image/watched_keys.dot
 
 如果某个客户端对 ``key1`` 进行了修改（比如执行 ``DEL key1`` ），
 那么所有监视 ``key1`` 的客户端，

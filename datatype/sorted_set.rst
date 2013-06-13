@@ -6,7 +6,7 @@
 ``REDIS_ZSET`` （有序集）是 :ref:`ZADD` 、 :ref:`ZCOUNT` 等命令的操作对象，
 它使用 ``REDIS_ENCODING_ZIPLIST`` 和 ``REDIS_ENCODING_SKIPLIST`` 两种方式编码：
 
-.. image:: image/redis_zset.png
+.. graphviz:: image/redis_zset.dot
 
 
 编码的选择
@@ -55,15 +55,15 @@ ZIPLIST 编码的有序集
 
 ::
 
-              |<--  element 1 -->|<--  element 2 -->|<--   .......   -->|<--  element N -->|
+              |<--  element 1 -->|<--  element 2 -->|<--   .......   -->|
 
-    +---------+---------+--------+---------+--------+---------+---------+---------+--------+---------+
-    | ZIPLIST |         |        |         |        |         |         |         |        | ZIPLIST |
-    | ENTRY   | member1 | score1 | member2 | score2 |   ...   |   ...   | memberN | scoreN | ENTRY   |
-    | HEAD    |         |        |         |        |         |         |         |        | END     |
-    +---------+---------+--------+---------+--------+---------+---------+---------+--------+---------+
+    +---------+---------+--------+---------+--------+---------+---------+---------+
+    | ZIPLIST |         |        |         |        |         |         | ZIPLIST |
+    | ENTRY   | member1 | score1 | member2 | score2 |   ...   |   ...   | ENTRY   |
+    | HEAD    |         |        |         |        |         |         | END     |
+    +---------+---------+--------+---------+--------+---------+---------+---------+
 
-    score1 <= score2 <= ... <= scoreN
+    score1 <= score2 <= ...
 
 虽然元素是按 ``score`` 域有序排序的，
 但对 ``ziplist`` 的节点指针只能线性地移动，
@@ -107,7 +107,7 @@ SKIPLIST 编码的有序集
 
 下图展示了一个 ``REDIS_ENCODING_SKIPLIST`` 编码的有序集：
 
-.. image:: image/zset.png
+.. graphviz:: image/zset.dot
 
 通过使用字典结构，
 并将 ``member`` 作为键，

@@ -1,0 +1,1 @@
+./makepdf && mv Redis.pdf pdf/redisbook.pdf

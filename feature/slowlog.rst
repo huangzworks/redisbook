@@ -71,7 +71,7 @@
 
 下图展示了一个 ``slowlog`` 属性的实例：
 
-.. image:: image/list_with_slowlog.png
+.. graphviz:: image/list_with_slowlog.dot
 
 
 慢查询日志的记录

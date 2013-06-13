@@ -94,7 +94,7 @@ Redis 自身功能的构建
 双端链表的实现由 ``listNode`` 和 ``list`` 两个数据结构构成，
 下图展示了由这两个结构组成的一个双端链表实例：
 
-.. image:: image/list_and_list_node.png
+.. graphviz:: image/list_and_list_node.dot
 
 其中， ``listNode`` 是双端链表的节点：
 

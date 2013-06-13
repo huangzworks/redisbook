@@ -6,7 +6,7 @@
 ``REDIS_SET`` （集合）是 :ref:`SADD` 、 :ref:`SRANDMEMBER` 等命令的操作对象，
 它使用 ``REDIS_ENCODING_INTSET`` 和 ``REDIS_ENCODING_HT`` 两种方式编码：
 
-.. image:: image/redis_set.png
+.. graphviz:: image/redis_set.dot
 
 
 编码的选择
@@ -43,7 +43,7 @@
 以下图片展示了一个以 ``REDIS_ENCODING_HT`` 编码表示的集合，
 集合的成员为 ``elem1`` 、 ``elem2`` 和 ``elem3`` ：
 
-.. image:: image/set_using_ht_encoding.png
+.. graphviz:: image/set_using_ht_encoding.dot
 
 
 集合命令的实现

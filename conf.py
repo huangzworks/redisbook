@@ -25,7 +25,10 @@ import sys, os
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.mathjax', 'sphinx.ext.intersphinx']
+extensions = ['sphinx.ext.mathjax', 'sphinx.ext.intersphinx', 'sphinx.ext.graphviz']
+
+graphviz_output_format = 'svg'
+graphviz_dot_args = ["-Nfontname='/usr/share/fonts/truetype/wqy/wqy-microhei.ttc'"]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -177,7 +180,14 @@ latex_elements = {
 'pointsize': '11pt',
 
 # Additional stuff for the LaTeX preamble.
-'preamble': '\usepackage{xeCJK}\n\setCJKmainfont{WenQuanYi Micro Hei}',
+'preamble': """
+    \usepackage{xeCJK}
+    \setCJKmainfont{WenQuanYi Zen Hei}
+    \setCJKsansfont{WenQuanYi Zen Hei}
+    \setCJKmonofont{WenQuanYi Zen Hei Mono}
+    \usepackage{tabularx}
+    \setcounter{tocdepth}{2}
+""",
 }
 
 # Grouping the document tree into LaTeX files. List of tuples

@@ -44,7 +44,7 @@ Redis 将这类因为对套接字进行多路复用而产生的事件称为文�
 作为例子，
 下图展示了三个已连接到服务器、但并没有发送命令的客户端：
 
-.. image:: image/event-waiting-for-read.png
+.. graphviz:: image/event-waiting-for-read.dot
 
 这三个客户端的状态如下表：
 
@@ -60,7 +60,7 @@ Redis 将这类因为对套接字进行多路复用而产生的事件称为文�
 并且命令请求已到达时，
 客户端 X 的读事件状态变为就绪：
 
-.. image:: image/event-ready-for-read.png
+.. graphviz:: image/event-ready-for-read.dot
 
 这时，
 三个客户端的状态如下表（只有客户端 X 的状态被更新了）：
@@ -104,7 +104,7 @@ Redis 将这类因为对套接字进行多路复用而产生的事件称为文�
 其中服务器正等待客户端 X 变得可写，
 从而将命令的执行结果返回给它：
 
-.. image:: image/event-waiting-for-write.png
+.. graphviz:: image/event-waiting-for-write.dot
 
 此时三个客户端的事件状态分别如下表：
 
@@ -119,7 +119,7 @@ Redis 将这类因为对套接字进行多路复用而产生的事件称为文�
 写事件就绪，
 服务器将保存在缓存内的命令执行结果返回给客户端：
 
-.. image:: image/event-ready-for-write.png
+.. graphviz:: image/event-ready-for-write.dot
 
 此时三个客户端的事件状态分别如下表（只有客户端 X 的状态被更新了）：
 
@@ -135,7 +135,7 @@ Redis 将这类因为对套接字进行多路复用而产生的事件称为文�
 至此，
 返回命令执行结果的动作执行完毕：
 
-.. image:: image/event-waiting-for-read.png
+.. graphviz:: image/event-waiting-for-read.dot
 
 .. note:: 同时关联写事件和读事件
 

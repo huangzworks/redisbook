@@ -139,7 +139,7 @@ redisObject 数据结构，以及 Redis 的数据类型
 
 下图展示了 ``redisObject`` 、Redis 所有数据类型、以及 Redis 所有编码方式（底层实现）三者之间的关系：
 
-.. image:: image/datatype.png
+.. graphviz:: image/datatype.dot
 
 这个图展示了 Redis 各种数据类型，以及它们的编码方式。
 
@@ -170,7 +170,7 @@ Redis 执行以下步骤：
 
 作为例子，以下展示了对键 ``key`` 执行 ``LPOP`` 命令的完整过程：
 
-.. image:: image/command_poly.png
+.. graphviz:: image/command_poly.dot
 
 
 对象共享
@@ -203,7 +203,7 @@ Redis 就会释放原来的值，
 
 作为例子，下图展示了三个列表，它们都带有指向共享对象数组中某个值对象的指针：
 
-.. image:: image/shared_integer.png
+.. graphviz:: image/shared_integer.dot
 
 三个列表的值分别为：
 
