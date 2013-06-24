@@ -324,7 +324,7 @@ sds 模块基于 ``sds`` 类型和 ``sdshdr`` 结构提供了以下 API ：
 ``sdsnew``              根据给定 C 字符串，创建一个相应的 ``sds``                                       :math:`O(N)`
 ``sdsdup``              复制给定 ``sds``                                                                :math:`O(N)`
 ``sdsfree``             释放给定 ``sds``                                                                :math:`O(N)`
-``sdsupdatelen``        更新给定 ``sds`` 所对应 ``sdshdr`` 结构的 ``free`` 和 ``len``                   :math:`O(1)`
+``sdsupdatelen``        更新给定 ``sds`` 所对应 ``sdshdr`` 结构的 ``free`` 和 ``len``                   :math:`O(N)`
 ``sdsclear``            清除给定 ``sds`` 的内容，将它初始化为 ``""``                                    :math:`O(1)`
 ``sdsMakeRoomFor``      对 ``sds`` 所对应 ``sdshdr`` 结构的 ``buf`` 进行扩展                            :math:`O(N)`
 ``sdsRemoveFreeSpace``  在不改动 ``buf`` 的情况下，将 ``buf`` 内多余的空间释放出去                      :math:`O(N)`
