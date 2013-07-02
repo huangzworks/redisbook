@@ -381,7 +381,7 @@ WATCH 的触发
 
     def check_safety_before_execute_trasaction():
 
-        if client.state && REDIS_DIRTY_CAS:
+        if client.state & REDIS_DIRTY_CAS:
             # 安全性已破坏，清除事务状态
             clear_transaction_state(client)
             # 清空事务队列
