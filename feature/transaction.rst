@@ -388,7 +388,7 @@ WATCH 的触发
             clear_transaction_queue(client)
             # 返回空回复给客户端
             send_empty_reply(client)
-        else
+        else:
             # 安全性完好，执行事务
             execute_transaction()
 
