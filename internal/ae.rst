@@ -208,7 +208,7 @@ Redis 将这类因为对套接字进行多路复用而产生的事件称为文�
         for time_event in server.time_event_linked_list:
 
             # 检查事件是否已经到达
-            if time_event.when >= unix_ts_in_ms():
+            if time_event.when <= unix_ts_in_ms():
 
                 # 处理已到达事件 
                 handle_time_event(server, time_event)
