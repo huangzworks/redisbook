@@ -360,7 +360,7 @@ WATCH 的触发
 
 在任何对数据库键空间（key space）进行修改的命令成功执行之后
 （比如 :ref:`FLUSHDB` 、 :ref:`SET` 、 :ref:`DEL` 、 :ref:`LPUSH` 、 :ref:`SADD` 、 :ref:`ZREM` ，诸如此类），
-``multi.c/touchWatchKey`` 函数都会被调用 —— 
+``multi.c/touchWatchedKey`` 函数都会被调用 —— 
 它检查数据库的 ``watched_keys`` 字典，
 看是否有客户端在监视已经被命令修改的键，
 如果有的话，

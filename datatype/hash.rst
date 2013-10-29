@@ -49,7 +49,7 @@
 创建空白哈希表时，
 程序默认使用 ``REDIS_ENCODING_ZIPLIST`` 编码，
 当以下任何一个条件被满足时，
-程序将编码从切换为 ``REDIS_ENCODING_HT`` ：
+程序将编码从 ``REDIS_ENCODING_ZIPLIST`` 切换为 ``REDIS_ENCODING_HT`` ：
 
 - 哈希表中某个键或某个值的长度大于 ``server.hash_max_ziplist_value`` （默认值为 ``64`` ）。
 

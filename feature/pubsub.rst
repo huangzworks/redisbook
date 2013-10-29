@@ -74,7 +74,7 @@ Redis 的 :ref:`SUBSCRIBE` 命令可以让客户端订阅任意数量的频道�
             redisServer.pubsub_channels[channel].append(client)
 
 通过 ``pubsub_channels`` 字典，
-程序只要检查某个频道是否字典的键，
+程序只要检查某个频道是否为字典的键，
 就可以知道该频道是否正在被客户端订阅；
 只要取出某个键的值，
 就可以得到所有订阅该频道的客户端的信息。

@@ -200,7 +200,7 @@ Redis 的主进程在执行完 ``pushGenericCommand`` 函数之后，
 而当 ``handleClientsBlockedOnLists`` 取消客户端的阻塞时，
 它从链表的最前面开始取消阻塞：
 这个链表形成了一个 FIFO 队列，
-最先被阻塞的客户端总值最先脱离阻塞状态，
+最先被阻塞的客户端总是最先脱离阻塞状态，
 Redis 文档称这种模式为先阻塞先服务（FBFS，first-block-first-serve）。
 
 举个例子，在下图所示的阻塞状况中，
