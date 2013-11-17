@@ -97,7 +97,7 @@ Redis 基于 William Pugh 论文中描述的跳跃表进行了以下修改：
 
 ``zslFreeNode``             释放给定的跳跃表节点                                            最坏 :math:`O(1)`
 
-``zslCreate``               创建并初始化一个新的跳跃表                                      最坏 :math:`O(N)`
+``zslCreate``               创建并初始化一个新的跳跃表                                      最坏 :math:`O(1)`
 
 ``zslFree``                 释放给定的跳跃表                                                最坏 :math:`O(N)`
 
