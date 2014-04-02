@@ -4,8 +4,16 @@
    contain the root `toctree` directive.
 
 
-Redis 设计与实现
+Redis 设计与实现（第一版）
 =================================================================
+
+.. warning::
+
+    你正在阅读的是《Redis 设计与实现》的第一版。
+    为了给\ `新版《Redis 设计与实现》 <http://www.douban.com/people/i_m_huangz/status/1366058941/>`_\ 的网站让位，
+    本书的访问地址将从原来的 `www.RedisBook.com <http://www.RedisBook.com>`_ 改为 `origin.RedisBook.com <http://origin.RedisBook.com>`_ 。
+    如果你曾经在博客或者其他地方使用过原来的地址来链接本书，
+    那么请尽快修改链接并指向新地址。
 
 本书的目标是以简明易懂的方式讲解 Redis 的内部运行机制，
 通过阅读本书，
