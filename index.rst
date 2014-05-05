@@ -213,4 +213,7 @@ Redis 还提供了一些同时对多个键值对进行处理的功能，
 或者发行有更多更棒内容的下一版，
 等等。
 
-捐款地址： https://me.alipay.com/huangz
+你可以通过使用\ `支付宝钱包 <https://mobile.alipay.com/main/download.htm?action=mobileClient>`_\ 扫描以下二维码来进行捐款，
+或者通过向支付宝帐号 huangz1990@gmail.com 转帐来进行捐款。
+
+.. image:: pay_to_huangz.png
