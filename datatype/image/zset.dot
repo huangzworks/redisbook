@@ -30,7 +30,7 @@ digraph zset {
 
     // dict
 
-    dict [label = "<head>dict | ... |<table> table | ...", fillcolor = "#A8E270"];
+    dict [label = "<head>dictht | ... |<table> table | ...", fillcolor = "#A8E270"];
     bucket [label = "<head>dictEntry**\n(bucket) |<0> 0 |<1> 1 |<2> 2", fillcolor = "#95BBE3"];
     entry_x [label = "<head>dictEntry |{<key>key\n x |<value>value\n 6}", fillcolor = "#F2F2F2"];
     entry_y [label = "<head>dictEntry |{<key>key\n y |<value>value\n 10}", fillcolor = "#F2F2F2"];
