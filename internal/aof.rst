@@ -757,9 +757,9 @@ AOF 重写可以由用户通过调用 :ref:`BGREWRITEAOF` 手动触发。
 
 - 记录当前 AOF 文件大小的变量 ``aof_current_size`` 。
 
-- 记录最后一次 AOF 重写之后， AOF 文件大小的变量 ``aof_rewirte_base_size`` 。
+- 记录最后一次 AOF 重写之后， AOF 文件大小的变量 ``aof_rewrite_base_size`` 。
 
-- 增长百分比变量 ``aof_rewirte_perc`` 。
+- 增长百分比变量 ``aof_rewrite_perc`` 。
 
 每次当 ``serverCron`` 函数执行时，
 它都会检查以下条件是否全部满足，
