@@ -9,8 +9,9 @@ Redis 设计与实现（第一版）
 
 .. warning::
 
-    你正在阅读的是《Redis 设计与实现》第一版，
-    查看新版《Redis 设计与实现》的相关信息请访问 `RedisBook.com <http://RedisBook.com/>`_ 。
+    你正在阅读的是《Redis 设计与实现》第一版（旧版），
+    请访问 `RedisBook.com <http://RedisBook.com/>`_ ，
+    查看关注 Redis 3.0 、包含更多新内容的新版《Redis 设计与实现》。
 
 本书的目标是以简明易懂的方式讲解 Redis 的内部运行机制，
 通过阅读本书，
