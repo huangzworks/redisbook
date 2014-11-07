@@ -1,0 +1,400 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>服务器与客户端 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="prev" title="事件" href="ae.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="ae.html" title="事件"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>服务器与客户端<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>前面的章节介绍了所有 Redis 的重要功能组件：
+数据结构、数据类型、事务、Lua 环境、事件处理、数据库、持久化，
+等等，
+但是我们还没有对 Redis 服务器本身做任何介绍。</p>
+<p>不过，
+服务器本身并没有多少需要介绍的新东西，
+因为服务器除了维持服务器状态之外，
+最重要的就是将前面介绍过的各个功能模块组合起来，
+而这些功能模块在前面的章节里已经介绍过了，
+所以本章将焦点放在服务器的初始化过程，
+以及服务器对命令的处理过程上。</p>
+<p>本章首先介绍服务器的初始化操作，
+观察一个 Redis 服务器从启动到可以接受客户端连接，
+需要经过什么步骤。</p>
+<p>然后介绍客户端是如何连接到服务器的，
+而服务器又是如何维持多个客户端的不同状态的。</p>
+<p>文章最后将介绍命令从发送到处理的整个过程，
+并列举了一个 <code class="docutils literal"><span class="pre">SET</span></code> 命令的执行过程作为例子。</p>
+<div class="section" id="id2">
+<h2>初始化服务器<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>从启动 Redis 服务器，
+到服务器可以接受外来客户端的网络连接这段时间，
+Redis 需要执行一系列初始化操作。</p>
+<p>整个初始化过程可以分为以下六个步骤：</p>
+<ol class="arabic simple">
+<li>初始化服务器全局状态。</li>
+<li>载入配置文件。</li>
+<li>创建 daemon 进程。</li>
+<li>初始化服务器功能模块。</li>
+<li>载入数据。</li>
+<li>开始事件循环。</li>
+</ol>
+<p>以下各个小节将介绍 Redis 服务器初始化的各个步骤。</p>
+<div class="section" id="id3">
+<h3>1. 初始化服务器全局状态<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h3>
+<p><code class="docutils literal"><span class="pre">redis.h/redisServer</span></code> 结构记录了和服务器相关的所有数据，
+这个结构主要包含以下信息：</p>
+<ul class="simple">
+<li>服务器中的所有数据库。</li>
+<li>命令表：在执行命令时，根据字符来查找相应命令的实现函数。</li>
+<li>事件状态。</li>
+<li>服务器的网络连接信息：套接字地址、端口，以及套接字描述符。</li>
+<li>所有已连接客户端的信息。</li>
+<li>Lua 脚本的运行环境及相关选项。</li>
+<li>实现订阅与发布（pub/sub）功能所需的数据结构。</li>
+<li>日志（log）和慢查询日志（slowlog）的选项和相关信息。</li>
+<li>数据持久化（AOF 和 RDB）的配置和状态。</li>
+<li>服务器配置选项：比如要创建多少个数据库，是否将服务器进程作为 daemon 进程来运行，最大连接多少个客户端，压缩结构（zip structure）的实体数量，等等。</li>
+<li>统计信息：比如键有多少次命令、不命中，服务器的运行时间，内存占用，等等。</li>
+</ul>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">为了简洁起见，上面只列出了单机情况下的 Redis 服务器信息，不包含 SENTINEL 、 MONITOR 、 CLUSTER 等功能的信息。</p>
+</div>
+<p>在这一步，
+程序创建一个 <code class="docutils literal"><span class="pre">redisServer</span></code> 结构的实例变量 <code class="docutils literal"><span class="pre">server</span></code> 用作服务器的全局状态，
+并将 <code class="docutils literal"><span class="pre">server</span></code> 的各个属性初始化为默认值。</p>
+<p>当 <code class="docutils literal"><span class="pre">server</span></code> 变量的初始化完成之后，
+程序进入服务器初始化的下一步：
+读入配置文件。</p>
+</div>
+<div class="section" id="id4">
+<h3>2. 载入配置文件<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h3>
+<p>在初始化服务器的上一步中，
+程序为 <code class="docutils literal"><span class="pre">server</span></code> 变量（也即是服务器状态）的各个属性设置了默认值，
+但这些默认值有时候并不是最合适的：</p>
+<ul class="simple">
+<li>用户可能想使用 AOF 持久化，而不是默认的 RDB 持久化。</li>
+<li>用户可能想用其他端口来运行 Redis ，以避免端口冲突。</li>
+<li>用户可能不想使用默认的 16 个数据库，而是分配更多或更少数量的数据库。</li>
+<li>用户可能想对默认的内存限制措施和回收策略做调整。</li>
+</ul>
+<p>等等。</p>
+<p>为了让使用者按自己的要求配置服务器，
+Redis 允许用户在运行服务器时，
+提供相应的配置文件（config file）或者显式的选项（option），
+Redis 在初始化完 <code class="docutils literal"><span class="pre">server</span></code> 变量之后，
+会读入配置文件和选项，
+然后根据这些配置来对 <code class="docutils literal"><span class="pre">server</span></code> 变量的属性值做相应的修改：</p>
+<ol class="arabic">
+<li><p class="first">如果单纯执行 <code class="docutils literal"><span class="pre">redis-server</span></code> 命令，那么服务器以默认的配置来运行 Redis 。</p>
+</li>
+<li><p class="first">另一方面， 如果给 Redis 服务器送入一个配置文件， 那么 Redis 将按配置文件的设置来更新服务器的状态。</p>
+<p>比如说， 通过命令 <code class="docutils literal"><span class="pre">redis-server</span> <span class="pre">/etc/my-redis.conf</span></code> ， Redis 会根据 <code class="docutils literal"><span class="pre">my-redis.conf</span></code> 文件的内容来对服务器状态做相应的修改。</p>
+</li>
+<li><p class="first">除此之外， 还可以显式地给服务器传入选项， 直接修改服务器配置。</p>
+<p>举个例子， 通过命令 <code class="docutils literal"><span class="pre">redis-server</span> <span class="pre">--port</span> <span class="pre">10086</span></code> ， 可以让 Redis 服务器端口变更为 <code class="docutils literal"><span class="pre">10086</span></code> 。</p>
+</li>
+<li><p class="first">当然， 同时使用配置文件和显式选项也是可以的， 如果文件和选项有冲突的地方， 那么优先使用选项所指定的配置值。</p>
+<p>举个例子， 如果运行命令 <code class="docutils literal"><span class="pre">redis-server</span> <span class="pre">/etc/my-redis.conf</span> <span class="pre">--port</span> <span class="pre">10086</span></code> ， 并且 <code class="docutils literal"><span class="pre">my-redis.conf</span></code> 也指定了 <code class="docutils literal"><span class="pre">port</span></code> 选项， 那么服务器将优先使用 <code class="docutils literal"><span class="pre">--port</span> <span class="pre">10086</span></code> （实际上是选项指定的值覆盖了配置文件中的值）。</p>
+</li>
+</ol>
+</div>
+<div class="section" id="daemon">
+<h3>3. 创建 daemon 进程<a class="headerlink" href="#daemon" title="Permalink to this headline">¶</a></h3>
+<p>Redis 默认以 daemon 进程的方式运行。</p>
+<p>当服务器初始化进行到这一步时，
+程序将创建 daemon 进程来运行 Redis ，
+并创建相应的 pid 文件。</p>
+</div>
+<div class="section" id="id5">
+<h3>4. 初始化服务器功能模块<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h3>
+<p>在这一步，
+初始化程序完成两件事：</p>
+<ul class="simple">
+<li>为 <code class="docutils literal"><span class="pre">server</span></code> 变量的数据结构子属性分配内存。</li>
+<li>初始化这些数据结构。</li>
+</ul>
+<p>为数据结构分配内存，
+并初始化这些数据结构，
+等同于对相应的功能进行初始化。</p>
+<p>比如说，
+当为订阅与发布所需的链表分配内存之后，
+订阅与发布功能就处于就绪状态，
+随时可以为 Redis 所用了。</p>
+<p>在这一步，
+程序完成的主要动作如下：</p>
+<ul class="simple">
+<li>初始化 Redis 进程的信号功能。</li>
+<li>初始化日志功能。</li>
+<li>初始化客户端功能。</li>
+<li>初始化共享对象。</li>
+<li>初始化事件功能。</li>
+<li>初始化数据库。</li>
+<li>初始化网络连接。</li>
+<li>初始化订阅与发布功能。</li>
+<li>初始化各个统计变量。</li>
+<li>关联服务器常规操作（cron job）到时间事件，关联客户端应答处理器到文件事件。</li>
+<li>如果 AOF 功能已打开，那么打开或创建 AOF 文件。</li>
+<li>设置内存限制。</li>
+<li>初始化 Lua 脚本环境。</li>
+<li>初始化慢查询功能。</li>
+<li>初始化后台操作线程。</li>
+</ul>
+<p>完成这一步之后，
+服务器打印出 Redis 的 ASCII LOGO 、服务器版本等信息，
+表示所有功能模块已经就绪，
+可以等待被使用了：</p>
+<div class="highlight-c"><div class="highlight"><pre>               _._
+          _.-``__ &#39;&#39;-._
+     _.-``    `.  `_.  &#39;&#39;-._           Redis 2.9.7 (7a47887b/1) 32 bit
+ .-`` .-```.  ```\/    _.,_ &#39;&#39;-._
+(    &#39;      ,       .-`  | `,    )     Running in stand alone mode
+|`-._`-...-` __...-.``-._|&#39;` _.-&#39;|     Port: 6379
+|    `-._   `._    /     _.-&#39;    |     PID: 6717
+ `-._    `-._  `-./  _.-&#39;    _.-&#39;
+|`-._`-._    `-.__.-&#39;    _.-&#39;_.-&#39;|
+|    `-._`-._        _.-&#39;_.-&#39;    |           http://redis.io
+ `-._    `-._`-.__.-&#39;_.-&#39;    _.-&#39;
+|`-._`-._    `-.__.-&#39;    _.-&#39;_.-&#39;|
+|    `-._`-._        _.-&#39;_.-&#39;    |
+ `-._    `-._`-.__.-&#39;_.-&#39;    _.-&#39;
+     `-._    `-.__.-&#39;    _.-&#39;
+         `-._        _.-&#39;
+             `-.__.-&#39;
+</pre></div>
+</div>
+<p>虽然所有功能已经就绪，
+但这时服务器的数据库还是一片空白，
+程序还需要将服务器上一次执行时记录的数据载入到当前服务器中，
+服务器的初始化才算真正完成。</p>
+</div>
+<div class="section" id="id6">
+<h3>5. 载入数据<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h3>
+<p>在这一步，
+程序需要将持久化在 RDB 或者 AOF 文件里的数据，
+载入到服务器进程里面。</p>
+<p>如果服务器有启用 AOF 功能的话，
+那么使用 AOF 文件来还原数据；
+否则，
+程序使用 RDB 文件来还原数据。</p>
+<p>当执行完这一步时，
+服务器打印出一段载入完成信息：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="p">[</span><span class="mi">6717</span><span class="p">]</span> <span class="mi">22</span> <span class="n">Feb</span> <span class="mi">11</span><span class="o">:</span><span class="mi">59</span><span class="o">:</span><span class="mf">14.830</span> <span class="o">*</span> <span class="n">DB</span> <span class="n">loaded</span> <span class="n">from</span> <span class="nl">disk</span><span class="p">:</span> <span class="mf">0.068</span> <span class="n">seconds</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id7">
+<h3>6. 开始事件循环<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h3>
+<p>到了这一步，
+服务器的初始化已经完成，
+程序打开事件循环，
+开始接受客户端连接。</p>
+<p>以下是服务器在这一步打印的信息：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="p">[</span><span class="mi">6717</span><span class="p">]</span> <span class="mi">22</span> <span class="n">Feb</span> <span class="mi">11</span><span class="o">:</span><span class="mi">59</span><span class="o">:</span><span class="mf">14.830</span> <span class="o">*</span> <span class="n">The</span> <span class="n">server</span> <span class="n">is</span> <span class="n">now</span> <span class="n">ready</span> <span class="n">to</span> <span class="n">accept</span> <span class="n">connections</span> <span class="n">on</span> <span class="n">port</span> <span class="mi">6379</span>
+</pre></div>
+</div>
+<p>以下是初始化完成之后，
+服务器状态和各个模块之间的关系图：</p>
+<img alt="../_images/server.png" src="../_images/server.png" />
+</div>
+</div>
+<div class="section" id="id8">
+<h2>客户端连接到服务器<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<p>当 Redis 服务器完成初始化之后，
+它就准备好可以接受外来客户端的连接了。</p>
+<p>当一个客户端通过套接字函数 <code class="docutils literal"><span class="pre">connect</span></code> 到服务器时，
+服务器执行以下步骤：</p>
+<ol class="arabic simple">
+<li>服务器通过文件事件无阻塞地 <code class="docutils literal"><span class="pre">accept</span></code> 客户端连接，并返回一个套接字描述符 <code class="docutils literal"><span class="pre">fd</span></code> 。</li>
+<li>服务器为 <code class="docutils literal"><span class="pre">fd</span></code> 创建一个对应的 <code class="docutils literal"><span class="pre">redis.h/redisClient</span></code> 结构实例，并将该实例加入到服务器的已连接客户端的链表中。</li>
+<li>服务器在事件处理器为该 <code class="docutils literal"><span class="pre">fd</span></code> 关联读文件事件。</li>
+</ol>
+<p>完成这三步之后，服务器就可以等待客户端发来命令请求了。</p>
+<p>Redis 以多路复用的方式来处理多个客户端，
+为了让多个客户端之间独立分开、不互相干扰，
+服务器为每个已连接客户端维持一个 <code class="docutils literal"><span class="pre">redisClient</span></code> 结构，
+从而单独保存该客户端的状态信息。</p>
+<p><code class="docutils literal"><span class="pre">redisClient</span></code> 结构主要包含以下信息：</p>
+<ul class="simple">
+<li>套接字描述符。</li>
+<li>客户端正在使用的数据库指针和数据库号码。</li>
+<li>客户端的查询缓冲（query buffer）和回复缓存（reply buffer）。</li>
+<li>一个指向命令函数的指针，以及字符串形式的命令、命令参数和命令个数，这些属性会在命令执行时使用。</li>
+<li>客户端状态：记录了客户端是否处于 SLAVE 、 MONITOR 或者事务状态。</li>
+<li>实现事务功能（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a>）所需的数据结构。</li>
+<li>实现阻塞功能（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><em>BLPOP</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpoplpush.html#brpoplpush" title="(in Redis 命令参考 v2.8)"><em>BRPOPLPUSH</em></a>）所需的数据结构。</li>
+<li>实现订阅与发布功能（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><em>SUBSCRIBE</em></a>）所需的数据结构。</li>
+<li>统计数据和选项：客户端创建的时间，客户端和服务器最后交互的时间，缓存的大小，等等。</li>
+</ul>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">为了简洁起见，上面列出的客户端结构信息不包含复制（replication）的相关属性。</p>
+</div>
+</div>
+<div class="section" id="id9">
+<h2>命令的请求、处理和结果返回<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
+<p>当客户端连上服务器之后，
+客户端就可以向服务器发送命令请求了。</p>
+<p>从客户端发送命令请求，
+到命令被服务器处理、并将结果返回客户端，
+整个过程有以下步骤：</p>
+<ol class="arabic simple">
+<li>客户端通过套接字向服务器传送命令协议数据。</li>
+<li>服务器通过读事件来处理传入数据，并将数据保存在客户端对应 <code class="docutils literal"><span class="pre">redisClient</span></code> 结构的查询缓存中。</li>
+<li>根据客户端查询缓存中的内容，程序从命令表中查找相应命令的实现函数。</li>
+<li>程序执行命令的实现函数，修改服务器的全局状态 <code class="docutils literal"><span class="pre">server</span></code> 变量，并将命令的执行结果保存到客户端 <code class="docutils literal"><span class="pre">redisClient</span></code> 结构的回复缓存中，然后为该客户端的 <code class="docutils literal"><span class="pre">fd</span></code> 关联写事件。</li>
+<li>当客户端 <code class="docutils literal"><span class="pre">fd</span></code> 的写事件就绪时，将回复缓存中的命令结果传回给客户端。至此，命令执行完毕。</li>
+</ol>
+</div>
+<div class="section" id="set">
+<h2>命令请求实例： SET 的执行过程<a class="headerlink" href="#set" title="Permalink to this headline">¶</a></h2>
+<p>为了更直观地理解命令执行的整个过程，
+我们用一个实际执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 命令的例子来讲解命令执行的过程。</p>
+<p>假设现在客户端 C1 是连接到服务器 S 的一个客户端，
+当用户执行命令 <code class="docutils literal"><span class="pre">SET</span> <span class="pre">YEAR</span> <span class="pre">2013</span></code> 时，
+客户端调用写入函数，
+将协议内容 <code class="docutils literal"><span class="pre">*3\r\n$3\r\nSET\r\n$4\r\nYEAR\r\n$4\r\n2013\r\n&quot;</span></code> 写入连接到服务器的套接字中。</p>
+<p>当 S 的文件事件处理器执行时，
+它会察觉到 C1 所对应的读事件已经就绪，
+于是它将协议文本读入，
+并保存在查询缓存。</p>
+<p>通过对查询缓存进行分析（parse），
+服务器在命令表中查找 <code class="docutils literal"><span class="pre">SET</span></code> 字符串所对应的命令实现函数，
+最终定位到 <code class="docutils literal"><span class="pre">t_string.c/setCommand</span></code> 函数，
+另外，
+两个命令参数 <code class="docutils literal"><span class="pre">YEAR</span></code> 和 <code class="docutils literal"><span class="pre">2013</span></code> 也会以字符串的形式保存在客户端结构中。</p>
+<p>接着，
+程序将客户端、要执行的命令、命令参数等送入命令执行器：
+执行器调用 <code class="docutils literal"><span class="pre">setCommand</span></code> 函数，
+将数据库中 <code class="docutils literal"><span class="pre">YEAR</span></code> 键的值修改为 <code class="docutils literal"><span class="pre">2013</span></code> ，
+然后将命令的执行结果保存在客户端的回复缓存中，
+并为客户端 <code class="docutils literal"><span class="pre">fd</span></code> 关联写事件，
+用于将结果回写给客户端。</p>
+<p>因为 <code class="docutils literal"><span class="pre">YEAR</span></code> 键的修改，
+其他和数据库命名空间相关程序，
+比如 AOF 、REPLICATION 还有事务安全性检查（是否修改了被 <code class="docutils literal"><span class="pre">WATCH</span></code> 监视的键？）也会被触发，
+当这些后续程序也执行完毕之后，
+命令执行器退出，
+服务器其他程序（比如时间事件处理器）继续运行。</p>
+<p>当 C1 对应的写事件就绪时，
+程序就会将保存在客户端结构回复缓存中的数据回写给客户端，
+当客户端接收到数据之后，
+它就将结果打印出来，
+显示给用户看。</p>
+<p>以上就是 <code class="docutils literal"><span class="pre">SET</span> <span class="pre">YEAR</span> <span class="pre">2013</span></code> 命令执行的整个过程。</p>
+</div>
+<div class="section" id="id10">
+<h2>小结<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>服务器经过初始化之后，才能开始接受命令。</li>
+<li>服务器初始化可以分为六个步骤：<ol class="arabic">
+<li>初始化服务器全局状态。</li>
+<li>载入配置文件。</li>
+<li>创建 daemon 进程。</li>
+<li>初始化服务器功能模块。</li>
+<li>载入数据。</li>
+<li>开始事件循环。</li>
+</ol>
+</li>
+<li>服务器为每个已连接的客户端维持一个客户端结构，这个结构保存了这个客户端的所有状态信息。</li>
+<li>客户端向服务器发送命令，服务器接受命令然后将命令传给命令执行器，执行器执行给定命令的实现函数，执行完成之后，将结果保存在缓存，最后回传给客户端。</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="ae.html" title="事件"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

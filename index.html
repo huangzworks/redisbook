@@ -1,0 +1,445 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Redis 设计与实现（第一版） &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="#" />
+    <link rel="next" title="简单动态字符串" href="internal-datastruct/sds.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="internal-datastruct/sds.html" title="简单动态字符串"
+             accesskey="N">next</a> |</li>
+        <li><a href="#">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="redis">
+<h1>Redis 设计与实现（第一版）<a class="headerlink" href="#redis" title="Permalink to this headline">¶</a></h1>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">你正在阅读的是《Redis 设计与实现》第一版（旧版），
+请访问 <a class="reference external" href="http://RedisBook.com/">RedisBook.com</a> ，
+查看关注 Redis 3.0 、包含更多新内容的新版《Redis 设计与实现》。</p>
+</div>
+<p>本书的目标是以简明易懂的方式讲解 Redis 的内部运行机制，
+通过阅读本书，
+你可以了解到 Redis 从数据结构到服务器构造在内的几乎所有知识。</p>
+<a class="reference internal image-reference" href="_images/redis-logo-small.png"><img alt="_images/redis-logo-small.png" class="align-left" src="_images/redis-logo-small.png" style="width: 249.7px; height: 83.05px;" /></a>
+<p>为了保证内容的简洁性，
+本书会尽量以高抽象层次的角度来观察 Redis ，
+并将代码的细节留给读者自己去考究。</p>
+<p>如果读者只是对 Redis 的内部运作机制感兴趣，
+但并不想深入代码，
+那么只阅读本书就足够了。</p>
+<p>另一方面，
+对于需要深入研究 Redis 代码的读者，
+本书附带了一份 <a class="reference external" href="https://github.com/huangz1990/annotated_redis_source">带有详细注释的 Redis 2.6 源代码</a> ，
+可以配合本书一并使用。</p>
+<div class="section" id="id1">
+<h2>第一部分：内部数据结构<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>Redis 和其他很多 key-value 数据库的不同之处在于，
+Redis 不仅支持简单的字符串键值对，
+它还提供了一系列数据结构类型值，
+比如列表、哈希、集合和有序集，
+并在这些数据结构类型上定义了一套强大的 API 。</p>
+<p>通过对不同类型的值进行操作，
+Redis 可以很轻易地完成其他只支持字符串键值对的 key-value 数据库很难（或者无法）完成的任务。</p>
+<p>在 Redis 的内部，
+数据结构类型值由高效的数据结构和算法进行支持，
+并且在 Redis 自身的构建当中，
+也大量用到了这些数据结构。</p>
+<p>这一部分将对 Redis 内存所使用的数据结构和算法进行介绍。</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="internal-datastruct/sds.html">简单动态字符串</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/sds.html#sds">sds 的用途</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/sds.html#redis">Redis 中的字符串</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/sds.html#id5">优化追加操作</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/sds.html#sds-api">sds 模块的 API</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/sds.html#id6">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="internal-datastruct/adlist.html">双端链表</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/adlist.html#id4">双端链表的应用</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/adlist.html#id6">双端链表的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/adlist.html#id7">迭代器</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/adlist.html#id9">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="internal-datastruct/dict.html">字典</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id2">字典的应用</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id4">字典的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id8">创建新字典</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id9">添加键值对到字典</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#add-when-empty">添加新元素到空白字典</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id11">添加新键值对时发生碰撞处理</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#rehash">添加新键值对时触发了 rehash 操作</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id13">Rehash 执行过程</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id18">渐进式 rehash</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id20">字典的收缩</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id21">字典其他操作</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id22">字典的迭代</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/dict.html#id24">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="internal-datastruct/skiplist.html">跳跃表</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/skiplist.html#id3">跳跃表的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/skiplist.html#id4">跳跃表的应用</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal-datastruct/skiplist.html#id5">小结</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id2">
+<h2>第二部分：内存映射数据结构<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>虽然内部数据结构非常强大，
+但是创建一系列完整的数据结构本身也是一件相当耗费内存的工作，
+当一个对象包含的元素数量并不多，
+或者元素本身的体积并不大时，
+使用代价高昂的内部数据结构并不是最好的办法。</p>
+<p>为了解决这一问题，
+Redis 在条件允许的情况下，
+会使用内存映射数据结构来代替内部数据结构。</p>
+<p>内存映射数据结构是一系列经过特殊编码的字节序列，
+创建它们所消耗的内存通常比作用类似的内部数据结构要少得多，
+如果使用得当，
+内存映射数据结构可以为用户节省大量的内存。</p>
+<p>不过，
+因为内存映射数据结构的编码和操作方式要比内部数据结构要复杂得多，
+所以内存映射数据结构所占用的 CPU 时间会比作用类似的内部数据结构要多。</p>
+<p>这一部分将对 Redis 目前正在使用的两种内存映射数据结构进行介绍。</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="compress-datastruct/intset.html">整数集合</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/intset.html#id2">整数集合的应用</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/intset.html#id3">数据结构和主要操作</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/intset.html#intset">intset 运行实例</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/intset.html#id8">升级</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/intset.html#id10">关于升级</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/intset.html#id13">关于元素移动</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/intset.html#id14">其他操作</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/intset.html#id20">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="compress-datastruct/ziplist.html">压缩列表</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/ziplist.html#ziplist">ziplist 的构成</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/ziplist.html#id2">节点的构成</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/ziplist.html#id3">创建新 ziplist</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/ziplist.html#id4">将节点添加到末端</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/ziplist.html#id5">将节点添加到某个/某些节点的前面</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/ziplist.html#id6">删除节点</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/ziplist.html#id7">遍历</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/ziplist.html#id8">查找元素、根据值定位节点</a></li>
+<li class="toctree-l2"><a class="reference internal" href="compress-datastruct/ziplist.html#id9">小结</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>第三部分：Redis 数据类型<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>既然 Redis 的键值对可以保存不同类型的值，
+那么很自然就需要对键值的类型进行检查以及多态处理。</p>
+<p>为了让基于类型的操作更加方便地执行，
+Redis 创建了自己的类型系统。</p>
+<p>在这一部分，
+我们将对 Redis 所使用的对象系统进行了解，
+并分别观察字符串、哈希表、列表、集合和有序集类型的底层实现。</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="datatype/object.html">对象处理机制</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="datatype/object.html#redisobject-redis">redisObject 数据结构，以及 Redis 的数据类型</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/object.html#id2">命令的类型检查和多态</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/object.html#id3">对象共享</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/object.html#id4">引用计数以及对象的销毁</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/object.html#id6">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="datatype/string.html">字符串</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="datatype/string.html#id2">字符串编码</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/string.html#id3">编码的选择</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/string.html#id4">字符串命令的实现</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="datatype/hash.html">哈希表</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="datatype/hash.html#id2">字典编码的哈希表</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/hash.html#id3">压缩列表编码的哈希表</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/hash.html#id4">编码的选择</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/hash.html#id5">哈希命令的实现</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="datatype/list.html">列表</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="datatype/list.html#id2">编码的选择</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/list.html#id3">列表命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/list.html#id4">阻塞的条件</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/list.html#id5">阻塞</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/list.html#lpush-rpush-linsert">阻塞因 LPUSH 、 RPUSH 、 LINSERT 等添加命令而被取消</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/list.html#fbfs">先阻塞先服务（FBFS）策略</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/list.html#id6">阻塞因超过最大等待时间而被取消</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="datatype/set.html">集合</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="datatype/set.html#id2">编码的选择</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/set.html#id3">编码的切换</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/set.html#id4">字典编码的集合</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/set.html#id5">集合命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/set.html#id6">求交集算法</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/set.html#id7">求并集算法</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/set.html#id8">求差集算法</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="datatype/sorted_set.html">有序集</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="datatype/sorted_set.html#id2">编码的选择</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/sorted_set.html#id3">编码的转换</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/sorted_set.html#ziplist">ZIPLIST 编码的有序集</a></li>
+<li class="toctree-l2"><a class="reference internal" href="datatype/sorted_set.html#skiplist">SKIPLIST 编码的有序集</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>第四部分：功能的实现<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>除了针对单个键值对的操作外，
+Redis 还提供了一些同时对多个键值对进行处理的功能，
+比如事务和 Lua 脚本。</p>
+<p>另外，
+一些辅助性的功能，
+比如慢查询，
+以及一些和数据库无关的功能，
+比如订阅与发布，
+我们也会经常用到。</p>
+<p>通过理解这些功能的底层实现，
+我们可以更有效地使用它们。</p>
+<p>这一部分将对这些功能进行介绍。</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="feature/transaction.html">事务</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#id2">事务</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#id3">开始事务</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#id4">命令入队</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#id5">执行事务</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#id6">在事务和非事务状态下执行命令</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#discard-multi-watch">事务状态下的 DISCARD 、 MULTI 和 WATCH 命令</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#watch">带 WATCH 的事务</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#id7">WATCH 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#id8">WATCH 的触发</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#acid">事务的 ACID 性质</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/transaction.html#id12">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="feature/pubsub.html">订阅与发布</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="feature/pubsub.html#id2">频道的订阅与信息发送</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/pubsub.html#id3">订阅频道</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/pubsub.html#id4">发送信息到频道</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/pubsub.html#id5">退订频道</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/pubsub.html#id6">模式的订阅与信息发送</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/pubsub.html#id7">订阅模式</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/pubsub.html#id8">发送信息到模式</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/pubsub.html#id9">退订模式</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/pubsub.html#id10">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="feature/scripting.html">Lua 脚本</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="feature/scripting.html#id1">初始化 Lua 环境</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/scripting.html#id2">脚本的安全性</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/scripting.html#id5">脚本的执行</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/scripting.html#eval">EVAL 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/scripting.html#evalsha">EVALSHA 命令的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/scripting.html#id8">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="feature/slowlog.html">慢查询日志</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="feature/slowlog.html#id2">相关数据结构</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/slowlog.html#id3">慢查询日志的记录</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/slowlog.html#id4">慢查询日志的操作</a></li>
+<li class="toctree-l2"><a class="reference internal" href="feature/slowlog.html#id5">小结</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>第五部分：内部运作机制<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>以下章节将对 Redis 最底层也最隐蔽的模块进行探讨：</p>
+<ul class="simple">
+<li>Redis 如何表示一个数据库？数据库操作是如何实现的？</li>
+<li>Redis 如何进行持久化？ RDB 模式和 AOF 模式有什么区别？</li>
+<li>Redis 如何处理输入命令？它又是如何将输出返回给客户端的？</li>
+<li>Redis 服务器如何初始化？传入服务器的命令又是以什么方法执行的？</li>
+</ul>
+<p>以上的这些问题，都是这一部分要解答的。</p>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="internal/db.html">数据库</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id2">数据库的结构</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id3">数据库的切换</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id4">数据库键空间</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id5">键空间的操作</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id11">键的过期时间</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id12">过期时间的保存</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id13">设置生存时间</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id14">过期键的判定</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id15">过期键的清除</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id19">过期键的惰性删除策略</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id20">过期键的定期删除策略</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#aof-rdb">过期键对 AOF 、RDB 和复制的影响</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#db-expand-and-shrink">数据库空间的收缩和扩展</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/db.html#id24">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="internal/rdb.html">RDB</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="internal/rdb.html#id2">保存</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/rdb.html#save-bgsave-aof-bgrewriteaof">SAVE 、 BGSAVE 、 AOF 写入和 BGREWRITEAOF</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/rdb.html#id3">载入</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/rdb.html#id4">RDB 文件结构</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/rdb.html#id5">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="internal/aof.html">AOF</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id1">AOF 命令同步</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id2">命令传播</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id3">缓存追加</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id4">文件写入和保存</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id5">AOF 保存模式</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id9">AOF 保存模式对性能和安全性的影响</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id10">AOF 文件的读取和数据还原</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id11">AOF 重写</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id12">AOF 重写的实现</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id13">AOF 后台重写</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id14">AOF 后台重写的触发条件</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/aof.html#id15">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="internal/ae.html">事件</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="internal/ae.html#id2">文件事件</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/ae.html#id5">时间事件</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/ae.html#id6">时间事件应用实例：服务器常规操作</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/ae.html#id7">事件的执行与调度</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/ae.html#id8">小结</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="internal/redis.html">服务器与客户端</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="internal/redis.html#id2">初始化服务器</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/redis.html#id8">客户端连接到服务器</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/redis.html#id9">命令的请求、处理和结果返回</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/redis.html#set">命令请求实例： SET 的执行过程</a></li>
+<li class="toctree-l2"><a class="reference internal" href="internal/redis.html#id10">小结</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>关于<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>本书由 <a class="reference external" href="http://huangz.me/">huangz</a> 编写。</p>
+<p>我在研究 Redis 源码并创作本书的过程中获得了极大的快乐，希望你在阅读本书时也能有同感。</p>
+<p>评论、问题、意见或建议都可以发表在本书自带的 disqus 论坛里，
+也可以通过 <a class="reference external" href="http://www.douban.com/people/i_m_huangz/">豆瓣</a> 、 <a class="reference external" href="http://weibo.com/huangz1990">微博</a> 或 <a class="reference external" href="https://twitter.com/huangz1990">Twitter</a> 联系我，
+我会尽可能地回复。</p>
+<p>要获得本书的最新动态，请关注 <a class="reference external" href="https://github.com/huangz1990/redisbook">redisbook</a> 项目。</p>
+<p>要了解编写本书时用到的工具（源码管理、文档的生成和托管、图片生成，等等），请阅读 <a class="reference external" href="http://blog.huangz.me/en/latest/diary/2013/tools-for-writing-redisbook.html">这篇文章</a> 。</p>
+<p>下载本书离线版本： <a class="reference external" href="https://github.com/huangz1990/redisbook/raw/master/pdf/redisbook.pdf">pdf 格式</a> 或 <a class="reference external" href="https://media.readthedocs.org/htmlzip/redisbook/latest/redisbook.zip">html 格式</a> 。</p>
+</div>
+<div class="section" id="id10">
+<h2>通过捐款支持本书<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h2>
+<p>如果你喜欢这本《Redis 设计与实现》的话，
+可以通过捐款的方式，
+支持作者继续更新本书：
+比如为本书修补漏洞、添加更多有趣的章节，
+或者发行有更多更棒内容的下一版，
+等等。</p>
+<p>你可以通过使用<a class="reference external" href="https://mobile.alipay.com/main/download.htm?action=mobileClient">支付宝钱包</a>扫描以下二维码来进行捐款，
+或者通过向支付宝帐号 <a class="reference external" href="mailto:huangz1990&#37;&#52;&#48;gmail&#46;com">huangz1990<span>&#64;</span>gmail<span>&#46;</span>com</a> 转帐来进行捐款。</p>
+<img alt="_images/pay_to_huangz.png" src="_images/pay_to_huangz.png" />
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="internal-datastruct/sds.html" title="简单动态字符串"
+             >next</a> |</li>
+        <li><a href="#">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

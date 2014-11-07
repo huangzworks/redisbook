@@ -1,0 +1,478 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>简单动态字符串 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="双端链表" href="adlist.html" />
+    <link rel="prev" title="Redis 设计与实现（第一版）" href="../index.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="adlist.html" title="双端链表"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../index.html" title="Redis 设计与实现（第一版）"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>简单动态字符串<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>Sds （Simple Dynamic String，简单动态字符串）是 Redis 底层所使用的字符串表示，
+几乎所有的 Redis 模块中都用了 sds。</p>
+<p>本章将对 sds 的实现、性能和功能等方面进行介绍，
+并说明 Redis 使用 sds 而不是传统 C 字符串的原因。</p>
+<div class="section" id="sds">
+<h2>sds 的用途<a class="headerlink" href="#sds" title="Permalink to this headline">¶</a></h2>
+<p>Sds 在 Redis 中的主要作用有以下两个：</p>
+<ol class="arabic simple">
+<li>实现字符串对象（StringObject）；</li>
+<li>在 Redis 程序内部用作 <code class="docutils literal"><span class="pre">char*</span></code> 类型的替代品；</li>
+</ol>
+<p>以下两个小节分别对这两种用途进行介绍。</p>
+<div class="section" id="id2">
+<h3>实现字符串对象<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h3>
+<p>Redis 是一个键值对数据库（key-value DB），
+数据库的值可以是字符串、集合、列表等多种类型的对象，
+而数据库的键则总是字符串对象。</p>
+<p>对于那些包含字符串值的字符串对象来说，
+每个字符串对象都包含一个 sds 值。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">“包含字符串值的字符串对象”，这种说法初听上去可能会有点奇怪，
+但是在 Redis 中，
+一个字符串对象除了可以保存字符串值之外，
+还可以保存 <code class="docutils literal"><span class="pre">long</span></code> 类型的值，
+所以为了严谨起见，
+这里需要强调一下：
+当字符串对象保存的是字符串时，
+它包含的才是 sds 值，
+否则的话，
+它就是一个 <code class="docutils literal"><span class="pre">long</span></code> 类型的值。</p>
+</div>
+<p>举个例子，
+以下命令创建了一个新的数据库键值对，
+这个键值对的键和值都是字符串对象，
+它们都包含一个 sds 值：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">SET</span> <span class="n">book</span> <span class="s">&quot;Mastering C++ in 21 days&quot;</span>
+<span class="n">OK</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">GET</span> <span class="n">book</span>
+<span class="s">&quot;Mastering C++ in 21 days&quot;</span>
+</pre></div>
+</div>
+<p>以下命令创建了另一个键值对，
+它的键是字符串对象，
+而值则是一个集合对象：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">SADD</span> <span class="n">nosql</span> <span class="s">&quot;Redis&quot;</span> <span class="s">&quot;MongoDB&quot;</span> <span class="s">&quot;Neo4j&quot;</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">3</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">SMEMBERS</span> <span class="n">nosql</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s">&quot;Neo4j&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s">&quot;Redis&quot;</span>
+<span class="mi">3</span><span class="p">)</span> <span class="s">&quot;MongoDB&quot;</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="sds-c-char">
+<h3>用 sds 取代 C 默认的 char* 类型<a class="headerlink" href="#sds-c-char" title="Permalink to this headline">¶</a></h3>
+<p>因为 <code class="docutils literal"><span class="pre">char*</span></code> 类型的功能单一，
+抽象层次低，
+并且不能高效地支持一些 Redis 常用的操作（比如追加操作和长度计算操作），
+所以在 Redis 程序内部，
+绝大部分情况下都会使用 sds 而不是 <code class="docutils literal"><span class="pre">char*</span></code> 来表示字符串。</p>
+<p>性能问题在稍后介绍 sds 定义的时候就会说到，
+因为我们还没有了解过 Redis 的其他功能模块，
+所以也没办法详细地举例说那里用到了 sds ，
+不过在后面的章节中，
+我们会经常看到其他模块（几乎每一个）都用到了 sds 类型值。</p>
+<p>目前来说，
+只要记住这个事实即可：
+在 Redis 中，
+客户端传入服务器的协议内容、
+aof 缓存、
+返回给客户端的回复，
+等等，
+这些重要的内容都是由 sds 类型来保存的。</p>
+</div>
+</div>
+<div class="section" id="redis">
+<h2>Redis 中的字符串<a class="headerlink" href="#redis" title="Permalink to this headline">¶</a></h2>
+<p>在 C 语言中，字符串可以用一个 <code class="docutils literal"><span class="pre">\0</span></code> 结尾的 <code class="docutils literal"><span class="pre">char</span></code> 数组来表示。</p>
+<p>比如说， <code class="docutils literal"><span class="pre">hello</span> <span class="pre">world</span></code> 在 C 语言中就可以表示为 <code class="docutils literal"><span class="pre">&quot;hello</span> <span class="pre">world\0&quot;</span></code> 。</p>
+<p>这种简单的字符串表示，在大多数情况下都能满足要求，但是，它并不能高效地支持长度计算和追加（append）这两种操作：</p>
+<ul class="simple">
+<li>每次计算字符串长度（<code class="docutils literal"><span class="pre">strlen(s)</span></code>）的复杂度为 <span class="math">\(\theta(N)\)</span> 。</li>
+<li>对字符串进行 N 次追加，必定需要对字符串进行 N 次内存重分配（<code class="docutils literal"><span class="pre">realloc</span></code>）。</li>
+</ul>
+<p>在 Redis 内部，
+字符串的追加和长度计算很常见，
+而 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/append.html#append" title="(in Redis 命令参考 v2.8)"><em>APPEND</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/strlen.html#strlen" title="(in Redis 命令参考 v2.8)"><em>STRLEN</em></a> 更是这两种操作，在 Redis 命令中的直接映射，
+这两个简单的操作不应该成为性能的瓶颈。</p>
+<p>另外，
+Redis 除了处理 C 字符串之外，
+还需要处理单纯的字节数组，
+以及服务器协议等内容，
+所以为了方便起见，
+Redis 的字符串表示还应该是<a class="reference external" href="http://en.wikipedia.org/wiki/Binary-safe">二进制安全的</a>：
+程序不应对字符串里面保存的数据做任何假设，
+数据可以是以 <code class="docutils literal"><span class="pre">\0</span></code> 结尾的 C 字符串，
+也可以是单纯的字节数组，
+或者其他格式的数据。</p>
+<p>考虑到这两个原因，
+Redis 使用 sds 类型替换了 C 语言的默认字符串表示：
+sds 既可高效地实现追加和长度计算，
+同时是二进制安全的。</p>
+<div class="section" id="id4">
+<h3>sds 的实现<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h3>
+<p>在前面的内容中，
+我们一直将 sds 作为一种抽象数据结构来说明，
+实际上，
+它的实现由以下两部分组成：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="kt">char</span> <span class="o">*</span><span class="n">sds</span><span class="p">;</span>
+
+
+<span class="k">struct</span> <span class="n">sdshdr</span> <span class="p">{</span>
+
+    <span class="c1">// buf 已占用长度</span>
+    <span class="kt">int</span> <span class="n">len</span><span class="p">;</span>
+
+    <span class="c1">// buf 剩余可用长度</span>
+    <span class="kt">int</span> <span class="n">free</span><span class="p">;</span>
+
+    <span class="c1">// 实际保存字符串数据的地方</span>
+    <span class="kt">char</span> <span class="n">buf</span><span class="p">[];</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>其中，类型 <code class="docutils literal"><span class="pre">sds</span></code> 是 <code class="docutils literal"><span class="pre">char</span> <span class="pre">*</span></code> 的别名（alias），而结构 <code class="docutils literal"><span class="pre">sdshdr</span></code> 则保存了 <code class="docutils literal"><span class="pre">len</span></code> 、 <code class="docutils literal"><span class="pre">free</span></code> 和 <code class="docutils literal"><span class="pre">buf</span></code> 三个属性。</p>
+<p>作为例子，以下是新创建的，同样保存 <code class="docutils literal"><span class="pre">hello</span> <span class="pre">world</span></code> 字符串的 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">struct</span> <span class="n">sdshdr</span> <span class="p">{</span>
+    <span class="n">len</span> <span class="o">=</span> <span class="mi">11</span><span class="p">;</span>
+    <span class="n">free</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">buf</span> <span class="o">=</span> <span class="s">&quot;hello world</span><span class="se">\0</span><span class="s">&quot;</span><span class="p">;</span>  <span class="c1">// buf 的实际长度为 len + 1</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>通过 <code class="docutils literal"><span class="pre">len</span></code> 属性， <code class="docutils literal"><span class="pre">sdshdr</span></code> 可以实现复杂度为 <span class="math">\(\theta(1)\)</span> 的长度计算操作。</p>
+<p>另一方面，
+通过对 <code class="docutils literal"><span class="pre">buf</span></code> 分配一些额外的空间，
+并使用 <code class="docutils literal"><span class="pre">free</span></code> 记录未使用空间的大小，
+<code class="docutils literal"><span class="pre">sdshdr</span></code> 可以让执行追加操作所需的内存重分配次数大大减少，
+下一节我们就会来详细讨论这一点。</p>
+<p>当然，
+sds 也对操作的正确实现提出了要求 —— 所有处理 <code class="docutils literal"><span class="pre">sdshdr</span></code> 的函数，都必须正确地更新 <code class="docutils literal"><span class="pre">len</span></code> 和 <code class="docutils literal"><span class="pre">free</span></code> 属性，否则就会造成 bug 。</p>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>优化追加操作<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>在前面说到过，利用 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构，除了可以用 <span class="math">\(\theta(1)\)</span> 复杂度获取字符串的长度之外，还可以减少追加（append）操作所需的内存重分配次数，以下就来详细解释这个优化的原理。</p>
+<p>为了易于理解，我们用一个 Redis 执行实例作为例子，解释一下，当执行以下代码时， Redis 内部发生了什么：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">SET</span> <span class="n">msg</span> <span class="s">&quot;hello world&quot;</span>
+<span class="n">OK</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">APPEND</span> <span class="n">msg</span> <span class="s">&quot; again!&quot;</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">18</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">GET</span> <span class="n">msg</span>
+<span class="s">&quot;hello world again!&quot;</span>
+</pre></div>
+</div>
+<p>首先， <code class="docutils literal"><span class="pre">SET</span></code> 命令创建并保存 <code class="docutils literal"><span class="pre">hello</span> <span class="pre">world</span></code> 到一个 <code class="docutils literal"><span class="pre">sdshdr</span></code> 中，这个 <code class="docutils literal"><span class="pre">sdshdr</span></code> 的值如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">struct</span> <span class="n">sdshdr</span> <span class="p">{</span>
+    <span class="n">len</span> <span class="o">=</span> <span class="mi">11</span><span class="p">;</span>
+    <span class="n">free</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">buf</span> <span class="o">=</span> <span class="s">&quot;hello world</span><span class="se">\0</span><span class="s">&quot;</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>当执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/append.html#append" title="(in Redis 命令参考 v2.8)"><em>APPEND</em></a> 命令时，相应的 <code class="docutils literal"><span class="pre">sdshdr</span></code> 被更新，字符串 <code class="docutils literal"><span class="pre">&quot;</span> <span class="pre">again!&quot;</span></code> 会被追加到原来的 <code class="docutils literal"><span class="pre">&quot;hello</span> <span class="pre">world&quot;</span></code> 之后：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">struct</span> <span class="n">sdshdr</span> <span class="p">{</span>
+    <span class="n">len</span> <span class="o">=</span> <span class="mi">18</span><span class="p">;</span>
+    <span class="n">free</span> <span class="o">=</span> <span class="mi">18</span><span class="p">;</span>
+    <span class="n">buf</span> <span class="o">=</span> <span class="s">&quot;hello world again!</span><span class="se">\0</span><span class="s">                  &quot;</span><span class="p">;</span>     <span class="c1">// 空白的地方为预分配空间，共 18 + 18 + 1 个字节</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>注意，
+当调用 <code class="docutils literal"><span class="pre">SET</span></code> 命令创建 <code class="docutils literal"><span class="pre">sdshdr</span></code> 时，
+<code class="docutils literal"><span class="pre">sdshdr</span></code> 的 <code class="docutils literal"><span class="pre">free</span></code> 属性为 <code class="docutils literal"><span class="pre">0</span></code> ，
+Redis 也没有为 <code class="docutils literal"><span class="pre">buf</span></code> 创建额外的空间 ——
+而在执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/append.html#append" title="(in Redis 命令参考 v2.8)"><em>APPEND</em></a> 之后，
+Redis 为 <code class="docutils literal"><span class="pre">buf</span></code> 创建了多于所需空间一倍的大小。</p>
+<p>在这个例子中，
+保存 <code class="docutils literal"><span class="pre">&quot;hello</span> <span class="pre">world</span> <span class="pre">again!&quot;</span></code> 共需要 <code class="docutils literal"><span class="pre">18</span> <span class="pre">+</span> <span class="pre">1</span></code> 个字节，
+但程序却为我们分配了 <code class="docutils literal"><span class="pre">18</span> <span class="pre">+</span> <span class="pre">18</span> <span class="pre">+</span> <span class="pre">1</span> <span class="pre">=</span> <span class="pre">37</span></code> 个字节 ——
+这样一来，
+如果将来再次对同一个 <code class="docutils literal"><span class="pre">sdshdr</span></code> 进行追加操作，
+只要追加内容的长度不超过 <code class="docutils literal"><span class="pre">free</span></code> 属性的值，
+那么就不需要对 <code class="docutils literal"><span class="pre">buf</span></code> 进行内存重分配。</p>
+<p>比如说，
+执行以下命令并不会引起 <code class="docutils literal"><span class="pre">buf</span></code> 的内存重分配，
+因为新追加的字符串长度小于 <code class="docutils literal"><span class="pre">18</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">APPEND</span> <span class="n">msg</span> <span class="s">&quot; again!&quot;</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">25</span>
+</pre></div>
+</div>
+<p>再次执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/append.html#append" title="(in Redis 命令参考 v2.8)"><em>APPEND</em></a> 命令之后，
+<code class="docutils literal"><span class="pre">msg</span></code> 的值所对应的 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构可以表示如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">struct</span> <span class="n">sdshdr</span> <span class="p">{</span>
+    <span class="n">len</span> <span class="o">=</span> <span class="mi">25</span><span class="p">;</span>
+    <span class="n">free</span> <span class="o">=</span> <span class="mi">11</span><span class="p">;</span>
+    <span class="n">buf</span> <span class="o">=</span> <span class="s">&quot;hello world again! again!</span><span class="se">\0</span><span class="s">           &quot;</span><span class="p">;</span>     <span class="c1">// 空白的地方为预分配空间，共 18 + 18 + 1 个字节</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">sds.c/sdsMakeRoomFor</span></code> 函数描述了 <code class="docutils literal"><span class="pre">sdshdr</span></code> 的这种内存预分配优化策略，
+以下是这个函数的伪代码版本：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">sdsMakeRoomFor</span><span class="p">(</span><span class="n">sdshdr</span><span class="p">,</span> <span class="n">required_len</span><span class="p">):</span>
+
+    <span class="c"># 预分配空间足够，无须再进行空间分配</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">sdshdr</span><span class="o">.</span><span class="n">free</span> <span class="o">&gt;=</span> <span class="n">required_len</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">sdshdr</span>
+
+    <span class="c"># 计算新字符串的总长度</span>
+    <span class="n">newlen</span> <span class="o">=</span> <span class="n">sdshdr</span><span class="o">.</span><span class="n">len</span> <span class="o">+</span> <span class="n">required_len</span>
+
+    <span class="c"># 如果新字符串的总长度小于 SDS_MAX_PREALLOC</span>
+    <span class="c"># 那么为字符串分配 2 倍于所需长度的空间</span>
+    <span class="c"># 否则就分配所需长度加上 SDS_MAX_PREALLOC 数量的空间</span>
+    <span class="k">if</span> <span class="n">newlen</span> <span class="o">&lt;</span> <span class="n">SDS_MAX_PREALLOC</span><span class="p">:</span>
+        <span class="n">newlen</span> <span class="o">*=</span> <span class="mi">2</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">newlen</span> <span class="o">+=</span> <span class="n">SDS_MAX_PREALLOC</span>
+
+    <span class="c"># 分配内存</span>
+    <span class="n">newsh</span> <span class="o">=</span> <span class="n">zrelloc</span><span class="p">(</span><span class="n">sdshdr</span><span class="p">,</span> <span class="n">sizeof</span><span class="p">(</span><span class="n">struct</span> <span class="n">sdshdr</span><span class="p">)</span><span class="o">+</span><span class="n">newlen</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c"># 更新 free 属性</span>
+    <span class="n">newsh</span><span class="o">.</span><span class="n">free</span> <span class="o">=</span> <span class="n">newlen</span> <span class="o">-</span> <span class="n">sdshdr</span><span class="o">.</span><span class="n">len</span>
+
+    <span class="c"># 返回</span>
+    <span class="k">return</span> <span class="n">newsh</span>
+</pre></div>
+</div>
+<p>在目前版本的 Redis 中，
+<code class="docutils literal"><span class="pre">SDS_MAX_PREALLOC</span></code> 的值为 <code class="docutils literal"><span class="pre">1024</span> <span class="pre">*</span> <span class="pre">1024</span></code> ，
+也就是说，
+当大小小于 <code class="docutils literal"><span class="pre">1MB</span></code> 的字符串执行追加操作时，
+<code class="docutils literal"><span class="pre">sdsMakeRoomFor</span></code> 就为它们分配多于所需大小一倍的空间；
+当字符串的大小大于 <code class="docutils literal"><span class="pre">1MB</span></code> ，
+那么 <code class="docutils literal"><span class="pre">sdsMakeRoomFor</span></code> 就为它们额外多分配 <code class="docutils literal"><span class="pre">1MB</span></code> 的空间。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>这种分配策略会浪费内存吗？</p>
+<p>执行过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/append.html#append" title="(in Redis 命令参考 v2.8)"><em>APPEND</em></a> 命令的字符串会带有额外的预分配空间，
+这些预分配空间不会被释放，
+除非该字符串所对应的键被删除，
+或者等到关闭 Redis 之后，
+再次启动时重新载入的字符串对象将不会有预分配空间。</p>
+<p>因为执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/append.html#append" title="(in Redis 命令参考 v2.8)"><em>APPEND</em></a> 命令的字符串键数量通常并不多，
+占用内存的体积通常也不大，
+所以这一般并不算什么问题。</p>
+<p class="last">另一方面，
+如果执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/append.html#append" title="(in Redis 命令参考 v2.8)"><em>APPEND</em></a> 操作的键很多，
+而字符串的体积又很大的话，
+那可能就需要修改 Redis 服务器，
+让它定时释放一些字符串键的预分配空间，
+从而更有效地使用内存。</p>
+</div>
+</div>
+<div class="section" id="sds-api">
+<h2>sds 模块的 API<a class="headerlink" href="#sds-api" title="Permalink to this headline">¶</a></h2>
+<p>sds 模块基于 <code class="docutils literal"><span class="pre">sds</span></code> 类型和 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构提供了以下 API ：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="20%" />
+<col width="66%" />
+<col width="15%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">函数</th>
+<th class="head">作用</th>
+<th class="head">算法复杂度</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">sdsnewlen</span></code></td>
+<td>创建一个指定长度的 <code class="docutils literal"><span class="pre">sds</span></code> ，接受一个 C 字符串作为初始化值</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">sdsempty</span></code></td>
+<td>创建一个只包含空白字符串 <code class="docutils literal"><span class="pre">&quot;&quot;</span></code> 的 <code class="docutils literal"><span class="pre">sds</span></code></td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">sdsnew</span></code></td>
+<td>根据给定 C 字符串，创建一个相应的 <code class="docutils literal"><span class="pre">sds</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">sdsdup</span></code></td>
+<td>复制给定 <code class="docutils literal"><span class="pre">sds</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">sdsfree</span></code></td>
+<td>释放给定 <code class="docutils literal"><span class="pre">sds</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">sdsupdatelen</span></code></td>
+<td>更新给定 <code class="docutils literal"><span class="pre">sds</span></code> 所对应 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构的 <code class="docutils literal"><span class="pre">free</span></code> 和 <code class="docutils literal"><span class="pre">len</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">sdsclear</span></code></td>
+<td>清除给定 <code class="docutils literal"><span class="pre">sds</span></code> 的内容，将它初始化为 <code class="docutils literal"><span class="pre">&quot;&quot;</span></code></td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">sdsMakeRoomFor</span></code></td>
+<td>对 <code class="docutils literal"><span class="pre">sds</span></code> 所对应 <code class="docutils literal"><span class="pre">sdshdr</span></code> 结构的 <code class="docutils literal"><span class="pre">buf</span></code> 进行扩展</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">sdsRemoveFreeSpace</span></code></td>
+<td>在不改动 <code class="docutils literal"><span class="pre">buf</span></code> 的情况下，将 <code class="docutils literal"><span class="pre">buf</span></code> 内多余的空间释放出去</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">sdsAllocSize</span></code></td>
+<td>计算给定 <code class="docutils literal"><span class="pre">sds</span></code> 的 <code class="docutils literal"><span class="pre">buf</span></code> 所占用的内存总数</td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">sdsIncrLen</span></code></td>
+<td>对 <code class="docutils literal"><span class="pre">sds</span></code> 的 <code class="docutils literal"><span class="pre">buf</span></code> 的右端进行扩展（expand）或修剪（trim）</td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">sdsgrowzero</span></code></td>
+<td>将给定 <code class="docutils literal"><span class="pre">sds</span></code> 的 <code class="docutils literal"><span class="pre">buf</span></code> 扩展至指定长度，无内容的部分用 <code class="docutils literal"><span class="pre">\0</span></code> 来填充</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">sdscatlen</span></code></td>
+<td>按给定长度对 <code class="docutils literal"><span class="pre">sds</span></code> 进行扩展，并将一个 C 字符串追加到 <code class="docutils literal"><span class="pre">sds</span></code> 的末尾</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">sdscat</span></code></td>
+<td>将一个 C 字符串追加到 <code class="docutils literal"><span class="pre">sds</span></code> 末尾</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">sdscatsds</span></code></td>
+<td>将一个 <code class="docutils literal"><span class="pre">sds</span></code> 追加到另一个 <code class="docutils literal"><span class="pre">sds</span></code> 末尾</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">sdscpylen</span></code></td>
+<td>将一个 C 字符串的部分内容复制到另一个 <code class="docutils literal"><span class="pre">sds</span></code> 中，需要时对 <code class="docutils literal"><span class="pre">sds</span></code> 进行扩展</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">sdscpy</span></code></td>
+<td>将一个 C 字符串复制到 <code class="docutils literal"><span class="pre">sds</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal"><span class="pre">sds</span></code> 还有另一部分功能性函数，
+比如 <code class="docutils literal"><span class="pre">sdstolower</span></code> 、 <code class="docutils literal"><span class="pre">sdstrim</span></code>  、 <code class="docutils literal"><span class="pre">sdscmp</span></code> ，
+等等，
+基本都是标准 C 字符串库函数的 <code class="docutils literal"><span class="pre">sds</span></code> 版本，
+这里不一一列举了。</p>
+</div>
+<div class="section" id="id6">
+<h2>小结<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>Redis 的字符串表示为 <code class="docutils literal"><span class="pre">sds</span></code> ，而不是 C 字符串（以 <code class="docutils literal"><span class="pre">\0</span></code> 结尾的 <code class="docutils literal"><span class="pre">char*</span></code>）。</li>
+<li>对比 C 字符串， <code class="docutils literal"><span class="pre">sds</span></code> 有以下特性：<ul>
+<li>可以高效地执行长度计算（<code class="docutils literal"><span class="pre">strlen</span></code>）；</li>
+<li>可以高效地执行追加操作（<code class="docutils literal"><span class="pre">append</span></code>）；</li>
+<li>二进制安全；</li>
+</ul>
+</li>
+<li><code class="docutils literal"><span class="pre">sds</span></code> 会为追加操作进行优化：加快追加操作的速度，并降低内存分配的次数，代价是多占用了一些内存，而且这些内存不会被主动释放。</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="adlist.html" title="双端链表"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="../index.html" title="Redis 设计与实现（第一版）"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

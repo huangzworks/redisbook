@@ -1,0 +1,856 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>压缩列表 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="对象处理机制" href="../datatype/object.html" />
+    <link rel="prev" title="整数集合" href="intset.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../datatype/object.html" title="对象处理机制"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="intset.html" title="整数集合"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="ziplist-chapter">
+<span id="id1"></span><h1>压缩列表<a class="headerlink" href="#ziplist-chapter" title="Permalink to this headline">¶</a></h1>
+<p>Ziplist 是由一系列特殊编码的内存块构成的列表，
+一个 ziplist 可以包含多个节点（entry），
+每个节点可以保存一个长度受限的字符数组（不以 <code class="docutils literal"><span class="pre">\0</span></code> 结尾的 <code class="docutils literal"><span class="pre">char</span></code> 数组）或者整数，
+包括：</p>
+<ul>
+<li><dl class="first docutils">
+<dt>字符数组</dt>
+<dd><ul class="first last simple">
+<li>长度小于等于 <code class="docutils literal"><span class="pre">63</span></code> （<span class="math">\(2^{6}-1\)</span>）字节的字符数组</li>
+<li>长度小于等于 <code class="docutils literal"><span class="pre">16383</span></code> （<span class="math">\(2^{14}-1\)</span>） 字节的字符数组</li>
+<li>长度小于等于 <code class="docutils literal"><span class="pre">4294967295</span></code> （<span class="math">\(2^{32}-1\)</span>）字节的字符数组</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt>整数</dt>
+<dd><ul class="first last simple">
+<li><code class="docutils literal"><span class="pre">4</span></code> 位长，介于 <code class="docutils literal"><span class="pre">0</span></code> 至 <code class="docutils literal"><span class="pre">12</span></code> 之间的无符号整数</li>
+<li><code class="docutils literal"><span class="pre">1</span></code> 字节长，有符号整数</li>
+<li><code class="docutils literal"><span class="pre">3</span></code> 字节长，有符号整数</li>
+<li><code class="docutils literal"><span class="pre">int16_t</span></code> 类型整数</li>
+<li><code class="docutils literal"><span class="pre">int32_t</span></code> 类型整数</li>
+<li><code class="docutils literal"><span class="pre">int64_t</span></code> 类型整数</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<p>因为 ziplist 节约内存的性质，
+哈希键、列表键和有序集合键初始化的底层实现皆采用 ziplist，
+更多信息请参考《<a class="reference internal" href="../datatype/hash.html#hash-chapter"><em>哈希表</em></a>》、《<a class="reference internal" href="../datatype/list.html#list-chapter"><em>列表</em></a>》和《<a class="reference internal" href="../datatype/sorted_set.html#sorted-set-chapter"><em>有序集</em></a>》章节。</p>
+<p>本章先介绍 ziplist 的组成结构，
+以及 ziplist 节点的编码方式。
+再介绍 ziplist 的添加操作和删除操作的执行过程，
+以及这两种操作可能引起的连锁更新现象。
+最后介绍 ziplist 的遍历方法和节点查找方式。</p>
+<div class="section" id="ziplist">
+<h2>ziplist 的构成<a class="headerlink" href="#ziplist" title="Permalink to this headline">¶</a></h2>
+<p>下图展示了一个 ziplist 的典型分布结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;----</span> <span class="n">ziplist</span> <span class="n">header</span> <span class="o">----&gt;|&lt;-----------</span> <span class="n">entries</span> <span class="o">-------------&gt;|&lt;-</span><span class="n">end</span><span class="o">-&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">2</span> <span class="n">bytes</span>    <span class="o">?</span>        <span class="o">?</span>        <span class="o">?</span>        <span class="o">?</span>     <span class="mi">1</span> <span class="n">byte</span>
+            <span class="o">+---------+--------+-------+--------+--------+--------+--------+-------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">zlbytes</span> <span class="o">|</span> <span class="n">zltail</span> <span class="o">|</span> <span class="n">zllen</span> <span class="o">|</span> <span class="n">entry1</span> <span class="o">|</span> <span class="n">entry2</span> <span class="o">|</span>  <span class="p">...</span>   <span class="o">|</span> <span class="n">entryN</span> <span class="o">|</span> <span class="n">zlend</span> <span class="o">|</span>
+            <span class="o">+---------+--------+-------+--------+--------+--------+--------+-------+</span>
+                                       <span class="o">^</span>                          <span class="o">^</span>        <span class="o">^</span>
+<span class="n">address</span>                                <span class="o">|</span>                          <span class="o">|</span>        <span class="o">|</span>
+                                <span class="n">ZIPLIST_ENTRY_HEAD</span>                <span class="o">|</span>   <span class="n">ZIPLIST_ENTRY_END</span>
+                                                                  <span class="o">|</span>
+                                                         <span class="n">ZIPLIST_ENTRY_TAIL</span>
+</pre></div>
+</div>
+<p>图中各个域的作用如下：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="11%" />
+<col width="14%" />
+<col width="75%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">域</th>
+<th class="head">长度/类型</th>
+<th class="head">域的值</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">zlbytes</span></code></td>
+<td><code class="docutils literal"><span class="pre">uint32_t</span></code></td>
+<td>整个 ziplist 占用的内存字节数，对 ziplist 进行内存重分配，或者计算末端时使用。</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">zltail</span></code></td>
+<td><code class="docutils literal"><span class="pre">uint32_t</span></code></td>
+<td>到达 ziplist 表尾节点的偏移量。
+通过这个偏移量，可以在不遍历整个 ziplist 的前提下，弹出表尾节点。</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">zllen</span></code></td>
+<td><code class="docutils literal"><span class="pre">uint16_t</span></code></td>
+<td>ziplist 中节点的数量。
+当这个值小于 <code class="docutils literal"><span class="pre">UINT16_MAX</span></code> （<code class="docutils literal"><span class="pre">65535</span></code>）时，这个值就是 ziplist 中节点的数量；
+当这个值等于 <code class="docutils literal"><span class="pre">UINT16_MAX</span></code> 时，节点的数量需要遍历整个 ziplist 才能计算得出。</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">entryX</span></code></td>
+<td><code class="docutils literal"><span class="pre">?</span></code></td>
+<td>ziplist 所保存的节点，各个节点的长度根据内容而定。</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">zlend</span></code></td>
+<td><code class="docutils literal"><span class="pre">uint8_t</span></code></td>
+<td><code class="docutils literal"><span class="pre">255</span></code> 的二进制值 <code class="docutils literal"><span class="pre">1111</span> <span class="pre">1111</span></code> （<code class="docutils literal"><span class="pre">UINT8_MAX</span></code>） ，用于标记 ziplist 的末端。</td>
+</tr>
+</tbody>
+</table>
+<p>为了方便地取出 ziplist 的各个域以及一些指针地址， ziplist 模块定义了以下宏：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="25%" />
+<col width="61%" />
+<col width="14%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">宏</th>
+<th class="head">作用</th>
+<th class="head">算法复杂度</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">ZIPLIST_BYTES(ziplist)</span></code></td>
+<td>取出 <code class="docutils literal"><span class="pre">zlbytes</span></code> 的值</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">ZIPLIST_TAIL_OFFSET(ziplist)</span></code></td>
+<td>取出 <code class="docutils literal"><span class="pre">zltail</span></code> 的值</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">ZIPLIST_LENGTH(ziplist)</span></code></td>
+<td>取出 <code class="docutils literal"><span class="pre">zllen</span></code> 的值</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">ZIPLIST_HEADER_SIZE</span></code></td>
+<td>返回 ziplist header 部分的长度，总是固定的 <code class="docutils literal"><span class="pre">10</span></code> 字节</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">ZIPLIST_ENTRY_HEAD(ziplist)</span></code></td>
+<td>返回到达 ziplist 第一个节点（表头）的地址</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">ZIPLIST_ENTRY_TAIL(ziplist)</span></code></td>
+<td>返回到达 ziplist 最后一个节点（表尾）的地址</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">ZIPLIST_ENTRY_END(ziplist)</span></code></td>
+<td>返回 ziplist 的末端，也即是 <code class="docutils literal"><span class="pre">zlend</span></code> 之前的地址</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>因为 ziplist header 部分的长度总是固定的（<code class="docutils literal"><span class="pre">4</span></code> 字节 + <code class="docutils literal"><span class="pre">4</span></code> 字节 + <code class="docutils literal"><span class="pre">2</span></code> 字节），
+因此将指针移动到表头节点的复杂度为常数时间；
+除此之外，
+因为表尾节点的地址可以通过 <code class="docutils literal"><span class="pre">zltail</span></code> 计算得出，
+因此将指针移动到表尾节点的复杂度也为常数时间。</p>
+<p>以下是用于操作 ziplist 的函数：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="20%" />
+<col width="63%" />
+<col width="17%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">函数名</th>
+<th class="head">作用</th>
+<th class="head">算法复杂度</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">ziplistNew</span></code></td>
+<td>创建一个新的 ziplist</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">ziplistResize</span></code></td>
+<td>重新调整 ziplist 的内存大小</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">ziplistPush</span></code></td>
+<td>将一个包含给定值的新节点推入 ziplist 的表头或者表尾</td>
+<td><span class="math">\(O(N^2)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">zipEntry</span></code></td>
+<td>取出给定地址上的节点，并将它的属性保存到 <code class="docutils literal"><span class="pre">zlentry</span></code> 结构然后返回</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">ziplistInsert</span></code></td>
+<td>将一个包含给定值的新节点插入到给定地址</td>
+<td><span class="math">\(O(N^2)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">ziplistDelete</span></code></td>
+<td>删除给定地址上的节点</td>
+<td><span class="math">\(O(N^2)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">ziplistDeleteRange</span></code></td>
+<td>在给定索引上，连续进行多次删除</td>
+<td><span class="math">\(O(N^2)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">ziplistFind</span></code></td>
+<td>在 ziplist 中查找并返回包含给定值的节点</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">ziplistLen</span></code></td>
+<td>返回 ziplist 保存的节点数量</td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">ziplistBlobLen</span></code></td>
+<td>以字节为单位，返回 ziplist 占用的内存大小</td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>因为 ziplist 由连续的内存块构成，
+在最坏情况下，
+当 <code class="docutils literal"><span class="pre">ziplistPush</span></code> 、 <code class="docutils literal"><span class="pre">ziplistDelete</span></code> 这类对节点进行增加或删除的函数之后，
+程序需要执行一种称为连锁更新的动作来维持 ziplist 结构本身的性质，
+所以这些函数的最坏复杂度都为 <span class="math">\(O(N^2)\)</span> 。
+不过，因为这种最坏情况出现的概率并不高，
+所以大可以放心使用 ziplist ，
+而不必太担心出现最坏情况。</p>
+</div>
+<div class="section" id="id2">
+<h2>节点的构成<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>一个 ziplist 可以包含多个节点，每个节点可以划分为以下几个部分：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;-------------------</span> <span class="n">entry</span> <span class="o">--------------------&gt;|</span>
+
+            <span class="o">+------------------+----------+--------+---------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">pre_entry_length</span> <span class="o">|</span> <span class="n">encoding</span> <span class="o">|</span> <span class="n">length</span> <span class="o">|</span> <span class="n">content</span> <span class="o">|</span>
+            <span class="o">+------------------+----------+--------+---------+</span>
+</pre></div>
+</div>
+<p>以下几个小节将分别对这个四个部分进行介绍。</p>
+<div class="section" id="pre-entry-length">
+<h3>pre_entry_length<a class="headerlink" href="#pre-entry-length" title="Permalink to this headline">¶</a></h3>
+<p><code class="docutils literal"><span class="pre">pre_entry_length</span></code> 记录了前一个节点的长度，通过这个值，可以进行指针计算，从而跳转到上一个节点。</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;----</span> <span class="n">previous</span> <span class="n">entry</span> <span class="o">---&gt;|&lt;---------------</span> <span class="n">current</span> <span class="n">entry</span> <span class="o">----------------&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">5</span> <span class="n">bytes</span>                   <span class="mi">1</span> <span class="n">byte</span>             <span class="o">?</span>          <span class="o">?</span>        <span class="o">?</span>
+            <span class="o">+-------------------------+-----------------------------+--------+---------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="p">...</span>                     <span class="o">|</span> <span class="n">pre_entry_length</span> <span class="o">|</span> <span class="n">encoding</span> <span class="o">|</span> <span class="n">length</span> <span class="o">|</span> <span class="n">content</span> <span class="o">|</span>
+            <span class="o">|</span>                         <span class="o">|</span>                  <span class="o">|</span>          <span class="o">|</span>        <span class="o">|</span>         <span class="o">|</span>
+<span class="n">value</span>       <span class="o">|</span>                         <span class="o">|</span> <span class="mo">0000</span> <span class="mo">0101</span>        <span class="o">|</span>    <span class="o">?</span>     <span class="o">|</span>   <span class="o">?</span>    <span class="o">|</span>    <span class="o">?</span>    <span class="o">|</span>
+            <span class="o">+-------------------------+-----------------------------+--------+---------+</span>
+            <span class="o">^</span>                         <span class="o">^</span>
+<span class="n">address</span>     <span class="o">|</span>                         <span class="o">|</span>
+            <span class="n">p</span> <span class="o">=</span> <span class="n">e</span> <span class="o">-</span> <span class="mi">5</span>                 <span class="n">e</span>
+</pre></div>
+</div>
+<p>上图展示了如何通过一个节点向前跳转到另一个节点：
+用指向当前节点的指针 <code class="docutils literal"><span class="pre">e</span></code> ，
+减去 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 的值（<code class="docutils literal"><span class="pre">0000</span> <span class="pre">0101</span></code> 的十进制值， <code class="docutils literal"><span class="pre">5</span></code>），
+得出的结果就是指向前一个节点的地址 <code class="docutils literal"><span class="pre">p</span></code> 。</p>
+<p>根据编码方式的不同， <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 域可能占用 <code class="docutils literal"><span class="pre">1</span></code> 字节或者 <code class="docutils literal"><span class="pre">5</span></code> 字节：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">1</span></code> 字节：如果前一节点的长度小于 <code class="docutils literal"><span class="pre">254</span></code> 字节，便使用一个字节保存它的值。</li>
+<li><code class="docutils literal"><span class="pre">5</span></code> 字节：如果前一节点的长度大于等于 <code class="docutils literal"><span class="pre">254</span></code> 字节，那么将第 <code class="docutils literal"><span class="pre">1</span></code> 个字节的值设为 <code class="docutils literal"><span class="pre">254</span></code> ，然后用接下来的 <code class="docutils literal"><span class="pre">4</span></code> 个字节保存实际长度。</li>
+</ul>
+<p>作为例子，
+以下是个长度为 <code class="docutils literal"><span class="pre">1</span></code> 字节的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 域，
+域的值为 <code class="docutils literal"><span class="pre">128</span></code> （二进制为 <code class="docutils literal"><span class="pre">1000</span> <span class="pre">0000</span></code> ）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;-------------------</span> <span class="n">entry</span> <span class="o">--------------------&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">1</span> <span class="n">byte</span>             <span class="o">?</span>          <span class="o">?</span>        <span class="o">?</span>
+            <span class="o">+------------------+----------+--------+---------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">pre_entry_length</span> <span class="o">|</span> <span class="n">encoding</span> <span class="o">|</span> <span class="n">length</span> <span class="o">|</span> <span class="n">content</span> <span class="o">|</span>
+            <span class="o">|</span>                  <span class="o">|</span>          <span class="o">|</span>        <span class="o">|</span>         <span class="o">|</span>
+<span class="n">value</span>       <span class="o">|</span> <span class="mi">1000</span> <span class="mo">0000</span>        <span class="o">|</span>          <span class="o">|</span>        <span class="o">|</span>         <span class="o">|</span>
+            <span class="o">+------------------+----------+--------+---------+</span>
+</pre></div>
+</div>
+<p>而以下则是个长度为 5 字节的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 域，
+域的第一个字节被设为 <code class="docutils literal"><span class="pre">254</span></code> 的二进制 <code class="docutils literal"><span class="pre">1111</span> <span class="pre">1110</span></code> ，
+而之后的四个字节则被设置为 <code class="docutils literal"><span class="pre">10086</span></code> 的二进制 <code class="docutils literal"><span class="pre">10</span> <span class="pre">0111</span> <span class="pre">0110</span> <span class="pre">0110</span></code> （多余的高位用 <code class="docutils literal"><span class="pre">0</span></code> 补完）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;------------------------------</span> <span class="n">entry</span> <span class="o">----------------------------------&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">5</span> <span class="n">bytes</span>                                     <span class="o">?</span>          <span class="o">?</span>        <span class="o">?</span>
+            <span class="o">+-------------------------------------------+----------+--------+---------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">pre_entry_length</span>                          <span class="o">|</span> <span class="n">encoding</span> <span class="o">|</span> <span class="n">length</span> <span class="o">|</span> <span class="n">content</span> <span class="o">|</span>
+            <span class="o">|</span>                                           <span class="o">|</span>          <span class="o">|</span>        <span class="o">|</span>         <span class="o">|</span>
+            <span class="o">|</span> <span class="mi">11111110</span> <span class="mo">00000000000000000010011101100110</span> <span class="o">|</span> <span class="o">?</span>        <span class="o">|</span> <span class="o">?</span>      <span class="o">|</span> <span class="o">?</span>       <span class="o">|</span>
+            <span class="o">+-------------------------------------------+----------+--------+---------+</span>
+            <span class="o">|&lt;-------&gt;|&lt;-------------------------------&gt;|</span>
+              <span class="mi">1</span> <span class="n">byte</span>       <span class="mi">4</span> <span class="n">bytes</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="encoding-length">
+<h3>encoding 和 length<a class="headerlink" href="#encoding-length" title="Permalink to this headline">¶</a></h3>
+<p><code class="docutils literal"><span class="pre">encoding</span></code> 和 <code class="docutils literal"><span class="pre">length</span></code> 两部分一起决定了 <code class="docutils literal"><span class="pre">content</span></code> 部分所保存的数据的类型（以及长度）。</p>
+<p>其中， <code class="docutils literal"><span class="pre">encoding</span></code> 域的长度为两个 bit ，
+它的值可以是 <code class="docutils literal"><span class="pre">00</span></code> 、 <code class="docutils literal"><span class="pre">01</span></code> 、 <code class="docutils literal"><span class="pre">10</span></code> 和 <code class="docutils literal"><span class="pre">11</span></code> ：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">00</span></code> 、 <code class="docutils literal"><span class="pre">01</span></code> 和 <code class="docutils literal"><span class="pre">10</span></code> 表示 <code class="docutils literal"><span class="pre">content</span></code> 部分保存着字符数组。</li>
+<li><code class="docutils literal"><span class="pre">11</span></code> 表示 <code class="docutils literal"><span class="pre">content</span></code> 部分保存着整数。</li>
+</ul>
+<p>以 <code class="docutils literal"><span class="pre">00</span></code> 、 <code class="docutils literal"><span class="pre">01</span></code> 和 <code class="docutils literal"><span class="pre">10</span></code> 开头的字符数组的编码方式如下：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="40%" />
+<col width="9%" />
+<col width="50%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">编码</th>
+<th class="head">编码长度</th>
+<th class="head">content 部分保存的值</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">00bbbbbb</span></code></td>
+<td>1 byte</td>
+<td>长度小于等于 63 字节的字符数组。</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">01bbbbbb</span> <span class="pre">xxxxxxxx</span></code></td>
+<td>2 byte</td>
+<td>长度小于等于 16383 字节的字符数组。</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">10____</span> <span class="pre">aaaaaaaa</span> <span class="pre">bbbbbbbb</span> <span class="pre">cccccccc</span> <span class="pre">dddddddd</span></code></td>
+<td>5 byte</td>
+<td>长度小于等于 4294967295 的字符数组。</td>
+</tr>
+</tbody>
+</table>
+<p>表格中的下划线 <code class="docutils literal"><span class="pre">_</span></code> 表示留空，而变量 <code class="docutils literal"><span class="pre">b</span></code> 、 <code class="docutils literal"><span class="pre">x</span></code> 等则代表实际的二进制数据。为了方便阅读，多个字节之间用空格隔开。</p>
+<p><code class="docutils literal"><span class="pre">11</span></code> 开头的整数编码如下：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="21%" />
+<col width="15%" />
+<col width="64%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">编码</th>
+<th class="head">编码长度</th>
+<th class="head">content 部分保存的值</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">11000000</span></code></td>
+<td>1 byte</td>
+<td><code class="docutils literal"><span class="pre">int16_t</span></code> 类型的整数</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">11010000</span></code></td>
+<td>1 byte</td>
+<td><code class="docutils literal"><span class="pre">int32_t</span></code> 类型的整数</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">11100000</span></code></td>
+<td>1 byte</td>
+<td><code class="docutils literal"><span class="pre">int64_t</span></code> 类型的整数</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">11110000</span></code></td>
+<td>1 byte</td>
+<td>24 bit 有符号整数</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">11111110</span></code></td>
+<td>1 byte</td>
+<td>8 bit 有符号整数</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">1111xxxx</span></code></td>
+<td>1 byte</td>
+<td>4 bit 无符号整数，介于 <code class="docutils literal"><span class="pre">0</span></code> 至 <code class="docutils literal"><span class="pre">12</span></code> 之间</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="content">
+<h3>content<a class="headerlink" href="#content" title="Permalink to this headline">¶</a></h3>
+<p><code class="docutils literal"><span class="pre">content</span></code> 部分保存着节点的内容，类型和长度由 <code class="docutils literal"><span class="pre">encoding</span></code> 和 <code class="docutils literal"><span class="pre">length</span></code> 决定。</p>
+<p>以下是一个保存着字符数组 <code class="docutils literal"><span class="pre">hello</span> <span class="pre">world</span></code> 的节点的例子：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>      <span class="o">|&lt;----------------------</span> <span class="n">entry</span> <span class="o">-----------------------&gt;|</span>
+
+<span class="n">size</span>        <span class="o">?</span>                  <span class="mi">2</span> <span class="n">bit</span>      <span class="mi">6</span> <span class="n">bit</span>    <span class="mi">11</span> <span class="n">byte</span>
+          <span class="o">+------------------+----------+--------+---------------+</span>
+<span class="n">component</span> <span class="o">|</span> <span class="n">pre_entry_length</span> <span class="o">|</span> <span class="n">encoding</span> <span class="o">|</span> <span class="n">length</span> <span class="o">|</span> <span class="n">content</span>       <span class="o">|</span>
+          <span class="o">|</span>                  <span class="o">|</span>          <span class="o">|</span>        <span class="o">|</span>               <span class="o">|</span>
+<span class="n">value</span>     <span class="o">|</span> <span class="o">?</span>                <span class="o">|</span>    <span class="mo">00</span>    <span class="o">|</span> <span class="mo">001011</span> <span class="o">|</span> <span class="n">hello</span> <span class="n">world</span>   <span class="o">|</span>
+          <span class="o">+------------------+----------+--------+---------------+</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">encoding</span></code> 域的值 <code class="docutils literal"><span class="pre">00</span></code> 表示节点保存着一个长度小于等于 63 字节的字符数组，
+<code class="docutils literal"><span class="pre">length</span></code> 域给出了这个字符数组的准确长度 —— <code class="docutils literal"><span class="pre">11</span></code> 字节（的二进制 <code class="docutils literal"><span class="pre">001011</span></code>），
+<code class="docutils literal"><span class="pre">content</span></code> 则保存着字符数组值 <code class="docutils literal"><span class="pre">hello</span> <span class="pre">world</span></code> 本身（为了方便表示， <code class="docutils literal"><span class="pre">content</span></code> 部分使用字符而不是二进制表示）。</p>
+<p>以下是另一个节点，它保存着整数 <code class="docutils literal"><span class="pre">10086</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>      <span class="o">|&lt;----------------------</span> <span class="n">entry</span> <span class="o">-----------------------&gt;|</span>
+
+<span class="n">size</span>        <span class="o">?</span>                  <span class="mi">2</span> <span class="n">bit</span>      <span class="mi">6</span> <span class="n">bit</span>    <span class="mi">2</span> <span class="n">bytes</span>
+          <span class="o">+------------------+----------+--------+---------------+</span>
+<span class="n">component</span> <span class="o">|</span> <span class="n">pre_entry_length</span> <span class="o">|</span> <span class="n">encoding</span> <span class="o">|</span> <span class="n">length</span> <span class="o">|</span> <span class="n">content</span>       <span class="o">|</span>
+          <span class="o">|</span>                  <span class="o">|</span>          <span class="o">|</span>        <span class="o">|</span>               <span class="o">|</span>
+<span class="n">value</span>     <span class="o">|</span> <span class="o">?</span>                <span class="o">|</span>    <span class="mi">11</span>    <span class="o">|</span> <span class="mo">000000</span> <span class="o">|</span> <span class="mi">10086</span>         <span class="o">|</span>
+          <span class="o">+------------------+----------+--------+---------------+</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">encoding</span></code> 域的值 <code class="docutils literal"><span class="pre">11</span></code> 表示节点保存的是一个整数；
+而 <code class="docutils literal"><span class="pre">length</span></code> 域的值 <code class="docutils literal"><span class="pre">000000</span></code> 表示这个节点的值的类型为 <code class="docutils literal"><span class="pre">int16_t</span></code> ；
+最后， <code class="docutils literal"><span class="pre">content</span></code> 保存着整数值 <code class="docutils literal"><span class="pre">10086</span></code> 本身（为了方便表示， <code class="docutils literal"><span class="pre">content</span></code> 部分用十进制而不是二进制表示）。</p>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>创建新 ziplist<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>函数 <code class="docutils literal"><span class="pre">ziplistNew</span></code> 用于创建一个新的空白 ziplist ，这个 ziplist 可以表示为下图：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;----</span> <span class="n">ziplist</span> <span class="n">header</span> <span class="o">----&gt;|&lt;--</span> <span class="n">end</span> <span class="o">--&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">4</span> <span class="n">bytes</span>   <span class="mi">4</span> <span class="n">bytes</span> <span class="mi">2</span> <span class="n">bytes</span>  <span class="mi">1</span> <span class="n">byte</span>
+            <span class="o">+---------+--------+-------+-----------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">zlbytes</span> <span class="o">|</span> <span class="n">zltail</span> <span class="o">|</span> <span class="n">zllen</span> <span class="o">|</span> <span class="n">zlend</span>     <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>           <span class="o">|</span>
+<span class="n">value</span>       <span class="o">|</span>  <span class="mi">1011</span>   <span class="o">|</span>  <span class="mi">1010</span>  <span class="o">|</span>   <span class="mi">0</span>   <span class="o">|</span> <span class="mi">1111</span> <span class="mi">1111</span> <span class="o">|</span>
+            <span class="o">+---------+--------+-------+-----------+</span>
+                                       <span class="o">^</span>
+                                       <span class="o">|</span>
+                               <span class="n">ZIPLIST_ENTRY_HEAD</span>
+                                       <span class="o">&amp;</span>
+<span class="n">address</span>                        <span class="n">ZIPLIST_ENTRY_TAIL</span>
+                                       <span class="o">&amp;</span>
+                               <span class="n">ZIPLIST_ENTRY_END</span>
+</pre></div>
+</div>
+<p>空白 ziplist 的表头、表尾和末端处于同一地址。</p>
+<p>创建了 ziplist 之后，
+就可以往里面添加新节点了，
+根据新节点添加位置的不同，
+这个工作可以分为两类来进行：</p>
+<ol class="arabic simple">
+<li>将节点添加到 ziplist 末端：在这种情况下，新节点的后面没有任何节点。</li>
+<li>将节点添加到某个/某些节点的前面：在这种情况下，新节点的后面有至少一个节点。</li>
+</ol>
+<p>以下两个小节分别讨论这两种情况。</p>
+</div>
+<div class="section" id="id4">
+<h2>将节点添加到末端<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>将新节点添加到 ziplist 的末端需要执行以下三个步骤：</p>
+<ol class="arabic simple">
+<li>记录到达 ziplist 末端所需的偏移量（因为之后的内存重分配可能会改变 ziplist 的地址，因此记录偏移量而不是保存指针）</li>
+<li>根据新节点要保存的值，计算出编码这个值所需的空间大小，以及编码它前一个节点的长度所需的空间大小，然后对 ziplist 进行内存重分配。</li>
+<li>设置新节点的各项属性： <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 、 <code class="docutils literal"><span class="pre">encoding</span></code> 、 <code class="docutils literal"><span class="pre">length</span></code> 和 <code class="docutils literal"><span class="pre">content</span></code> 。</li>
+<li>更新 ziplist 的各项属性，比如记录空间占用的 <code class="docutils literal"><span class="pre">zlbytes</span></code> ，到达表尾节点的偏移量 <code class="docutils literal"><span class="pre">zltail</span></code> ，以及记录节点数量的 <code class="docutils literal"><span class="pre">zllen</span></code> 。</li>
+</ol>
+<p>举个例子，假设现在要将一个新节点添加到只含有一个节点的 ziplist 上，程序首先要执行步骤 1 ，定位 ziplist 的末端：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;----</span> <span class="n">ziplist</span> <span class="n">header</span> <span class="o">----&gt;|&lt;---</span> <span class="n">entries</span> <span class="o">--&gt;|&lt;--</span> <span class="n">end</span> <span class="o">--&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">2</span> <span class="n">bytes</span>  <span class="mi">5</span> <span class="n">bytes</span>          <span class="mi">1</span> <span class="n">bytes</span>
+            <span class="o">+---------+--------+-------+----------------+-----------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">zlbytes</span> <span class="o">|</span> <span class="n">zltail</span> <span class="o">|</span> <span class="n">zllen</span> <span class="o">|</span> <span class="n">entry</span> <span class="mi">1</span>        <span class="o">|</span> <span class="n">zlend</span>     <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>           <span class="o">|</span>
+<span class="n">value</span>       <span class="o">|</span>  <span class="mi">10000</span>  <span class="o">|</span>  <span class="mi">1010</span>  <span class="o">|</span>   <span class="mi">1</span>   <span class="o">|</span> <span class="o">?</span>              <span class="o">|</span> <span class="mi">1111</span> <span class="mi">1111</span> <span class="o">|</span>
+            <span class="o">+---------+--------+-------+----------------+-----------+</span>
+                                       <span class="o">^</span>                <span class="o">^</span>
+                                       <span class="o">|</span>                <span class="o">|</span>
+<span class="n">address</span>                         <span class="n">ZIPLIST_ENTRY_HEAD</span>   <span class="n">ZIPLIST_ENTRY_END</span>
+                                       <span class="o">&amp;</span>
+                                <span class="n">ZIPLIST_ENTRY_TAIL</span>
+</pre></div>
+</div>
+<p>然后执行步骤 2 ，程序需要计算新节点所需的空间：</p>
+<p>假设我们要添加到节点里的值为字符数组 <code class="docutils literal"><span class="pre">hello</span> <span class="pre">world</span></code> ，
+那么保存这个值共需要 12 字节的空间：</p>
+<ul class="simple">
+<li>11 字节用于保存字符数组本身；</li>
+<li>另外 1 字节中的 2 bit 用于保存类型编码 <code class="docutils literal"><span class="pre">00</span></code> ， 而其余 6 bit 则保存字符数组长度 <code class="docutils literal"><span class="pre">11</span></code> 的二进制 <code class="docutils literal"><span class="pre">001011</span></code> 。</li>
+</ul>
+<p>另外，节点还需要 1 字节，
+用于保存前一个节点的长度 <code class="docutils literal"><span class="pre">5</span></code> （二进制 <code class="docutils literal"><span class="pre">101</span></code> ）。</p>
+<p>合算起来，为了添加新节点， ziplist 总共需要多分配 13 字节空间。
+以下是分配完成之后， ziplist 的样子：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;----</span> <span class="n">ziplist</span> <span class="n">header</span> <span class="o">----&gt;|&lt;------------</span> <span class="n">entries</span> <span class="o">------------&gt;|&lt;--</span> <span class="n">end</span> <span class="o">--&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">2</span> <span class="n">bytes</span>  <span class="mi">5</span> <span class="n">bytes</span>          <span class="mi">13</span> <span class="n">bytes</span>           <span class="mi">1</span> <span class="n">bytes</span>
+            <span class="o">+---------+--------+-------+----------------+------------------+-----------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">zlbytes</span> <span class="o">|</span> <span class="n">zltail</span> <span class="o">|</span> <span class="n">zllen</span> <span class="o">|</span> <span class="n">entry</span> <span class="mi">1</span>        <span class="o">|</span> <span class="n">entry</span> <span class="mi">2</span>          <span class="o">|</span> <span class="n">zlend</span>     <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+<span class="n">value</span>       <span class="o">|</span>  <span class="mi">10000</span>  <span class="o">|</span>  <span class="mi">1010</span>  <span class="o">|</span>   <span class="mi">1</span>   <span class="o">|</span> <span class="o">?</span>              <span class="o">|</span> <span class="n">pre_entry_length</span> <span class="o">|</span> <span class="mi">1111</span> <span class="mi">1111</span> <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="o">?</span>                <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">encoding</span>         <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="o">?</span>                <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">length</span>           <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="o">?</span>                <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">content</span>          <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="o">?</span>                <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">+---------+--------+-------+----------------+------------------+-----------+</span>
+                                       <span class="o">^</span>                <span class="o">^</span>
+                                       <span class="o">|</span>                <span class="o">|</span>
+<span class="n">address</span>                       <span class="n">ZIPLIST_ENTRY_HEAD</span>   <span class="n">ZIPLIST_ENTRY_END</span>
+                                       <span class="o">&amp;</span>
+                              <span class="n">ZIPLIST_ENTRY_TAIL</span>
+</pre></div>
+</div>
+<p>步骤三，更新新节点的各项属性（为了方便表示， <code class="docutils literal"><span class="pre">content</span></code> 的内容使用字符而不是二进制来表示）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;----</span> <span class="n">ziplist</span> <span class="n">header</span> <span class="o">----&gt;|&lt;------------</span> <span class="n">entries</span> <span class="o">------------&gt;|&lt;--</span> <span class="n">end</span> <span class="o">--&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">2</span> <span class="n">bytes</span>  <span class="mi">5</span> <span class="n">bytes</span>          <span class="mi">13</span> <span class="n">bytes</span>           <span class="mi">1</span> <span class="n">bytes</span>
+            <span class="o">+---------+--------+-------+----------------+------------------+-----------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">zlbytes</span> <span class="o">|</span> <span class="n">zltail</span> <span class="o">|</span> <span class="n">zllen</span> <span class="o">|</span> <span class="n">entry</span> <span class="mi">1</span>        <span class="o">|</span> <span class="n">entry</span> <span class="mi">2</span>          <span class="o">|</span> <span class="n">zlend</span>     <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+<span class="n">value</span>       <span class="o">|</span>  <span class="mi">10000</span>  <span class="o">|</span>  <span class="mi">1010</span>  <span class="o">|</span>   <span class="mi">1</span>   <span class="o">|</span> <span class="o">?</span>              <span class="o">|</span> <span class="n">pre_entry_length</span> <span class="o">|</span> <span class="mi">1111</span> <span class="mi">1111</span> <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="mi">101</span>              <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">encoding</span>         <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="mo">00</span>               <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">length</span>           <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="mo">001011</span>           <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">content</span>          <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">hello</span> <span class="n">world</span>      <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">+---------+--------+-------+----------------+------------------+-----------+</span>
+                                       <span class="o">^</span>                <span class="o">^</span>
+                                       <span class="o">|</span>                <span class="o">|</span>
+<span class="n">address</span>                       <span class="n">ZIPLIST_ENTRY_HEAD</span>   <span class="n">ZIPLIST_ENTRY_END</span>
+                                       <span class="o">&amp;</span>
+                              <span class="n">ZIPLIST_ENTRY_TAIL</span>
+</pre></div>
+</div>
+<p>最后一步，更新 ziplist 的 <code class="docutils literal"><span class="pre">zlbytes</span></code> 、 <code class="docutils literal"><span class="pre">zltail</span></code> 和 <code class="docutils literal"><span class="pre">zllen</span></code> 属性：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;----</span> <span class="n">ziplist</span> <span class="n">header</span> <span class="o">----&gt;|&lt;------------</span> <span class="n">entries</span> <span class="o">------------&gt;|&lt;--</span> <span class="n">end</span> <span class="o">--&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">2</span> <span class="n">bytes</span>  <span class="mi">5</span> <span class="n">bytes</span>          <span class="mi">13</span> <span class="n">bytes</span>           <span class="mi">1</span> <span class="n">bytes</span>
+            <span class="o">+---------+--------+-------+----------------+------------------+-----------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">zlbytes</span> <span class="o">|</span> <span class="n">zltail</span> <span class="o">|</span> <span class="n">zllen</span> <span class="o">|</span> <span class="n">entry</span> <span class="mi">1</span>        <span class="o">|</span> <span class="n">entry</span> <span class="mi">2</span>          <span class="o">|</span> <span class="n">zlend</span>     <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+<span class="n">value</span>       <span class="o">|</span>  <span class="mi">11101</span>  <span class="o">|</span>  <span class="mi">1111</span>  <span class="o">|</span>  <span class="mi">10</span>   <span class="o">|</span> <span class="o">?</span>              <span class="o">|</span> <span class="n">pre_entry_length</span> <span class="o">|</span> <span class="mi">1111</span> <span class="mi">1111</span> <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="mi">101</span>              <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">encoding</span>         <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="mo">00</span>               <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">length</span>           <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="mo">001011</span>           <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">content</span>          <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span> <span class="n">hello</span> <span class="n">world</span>      <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>           <span class="o">|</span>
+            <span class="o">+---------+--------+-------+----------------+------------------+-----------+</span>
+                                       <span class="o">^</span>                <span class="o">^</span>                  <span class="o">^</span>
+                                       <span class="o">|</span>                <span class="o">|</span>                  <span class="o">|</span>
+<span class="n">address</span>                                <span class="o">|</span>          <span class="n">ZIPLIST_ENTRY_TAIL</span>   <span class="n">ZIPLIST_ENTRY_END</span>
+                                       <span class="o">|</span>
+                               <span class="n">ZIPLIST_ENTRY_HEAD</span>
+</pre></div>
+</div>
+<p>到这一步，添加新节点到表尾的工作正式完成。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">这里没有演示往空 ziplist 添加第一个节点的过程，
+因为这个过程和上面演示的添加第二个节点的过程类似；
+而且因为第一个节点的存在，
+添加第二个节点的过程可以更好地展示“将节点添加到表尾”这一操作的一般性。</p>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>将节点添加到某个/某些节点的前面<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>比起将新节点添加到 ziplist 的末端，
+将一个新节点添加到某个/某些节点的前面要复杂得多，
+因为这种操作除了将新节点添加到 ziplist 以外，
+还可能引起后续一系列节点的改变。</p>
+<p>举个例子，假设我们要将一个新节点 <code class="docutils literal"><span class="pre">new</span></code> 添加到节点 <code class="docutils literal"><span class="pre">prev</span></code> 和 <code class="docutils literal"><span class="pre">next</span></code> 之间：</p>
+<div class="highlight-c"><div class="highlight"><pre>   <span class="n">add</span> <span class="n">new</span> <span class="n">entry</span> <span class="n">here</span>
+           <span class="o">|</span>
+           <span class="n">V</span>
+<span class="o">+----------+----------+----------+----------+----------+</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">|</span>   <span class="n">prev</span>   <span class="o">|</span>   <span class="n">next</span>   <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">|</span>   <span class="p">...</span>    <span class="o">|</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">+----------+----------+----------+----------+----------+</span>
+</pre></div>
+</div>
+<p>程序首先为新节点扩大 ziplist 的空间：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+----------+----------+----------+----------+----------+----------+</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">|</span>   <span class="n">prev</span>   <span class="o">|</span>   <span class="o">???</span>    <span class="o">|</span>   <span class="n">next</span>   <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">|</span>   <span class="p">...</span>    <span class="o">|</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">+----------+----------+----------+----------+----------+----------+</span>
+
+           <span class="o">|&lt;--------&gt;|</span>
+              <span class="n">expand</span>
+              <span class="n">space</span>
+</pre></div>
+</div>
+<p>然后设置 <code class="docutils literal"><span class="pre">new</span></code> 节点的各项值 ——
+到目前为止，一切都和前面介绍的添加操作一样：</p>
+<div class="highlight-c"><div class="highlight"><pre>             <span class="n">set</span> <span class="n">value</span><span class="p">,</span>
+             <span class="n">property</span><span class="p">,</span>
+             <span class="n">length</span><span class="p">,</span>
+             <span class="n">etc</span><span class="p">.</span>
+                <span class="o">|</span>
+                <span class="n">v</span>
+<span class="o">+----------+----------+----------+----------+----------+----------+</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">|</span>   <span class="n">prev</span>   <span class="o">|</span>   <span class="n">new</span>    <span class="o">|</span>   <span class="n">next</span>   <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">|</span>   <span class="p">...</span>    <span class="o">|</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">+----------+----------+----------+----------+----------+----------+</span>
+</pre></div>
+</div>
+<p>现在，新的 <code class="docutils literal"><span class="pre">new</span></code> 节点取代原来的 <code class="docutils literal"><span class="pre">prev</span></code> 节点，
+成为了 <code class="docutils literal"><span class="pre">next</span></code> 节点的新前驱节点，
+不过，
+因为这时 <code class="docutils literal"><span class="pre">next</span></code> 节点的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 域编码的仍然是 <code class="docutils literal"><span class="pre">prev</span></code> 节点的长度，
+所以程序需要将 <code class="docutils literal"><span class="pre">new</span></code> 节点的长度编码进 <code class="docutils literal"><span class="pre">next</span></code> 节点的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 域里，
+这里会出现三种可能：</p>
+<ol class="arabic simple">
+<li><code class="docutils literal"><span class="pre">next</span></code> 的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 域的长度正好能够编码 <code class="docutils literal"><span class="pre">new</span></code> 的长度（都是 1 字节或者都是 5 字节）</li>
+<li><code class="docutils literal"><span class="pre">next</span></code> 的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 只有 1 字节长，但编码 <code class="docutils literal"><span class="pre">new</span></code> 的长度需要 5 字节</li>
+<li><code class="docutils literal"><span class="pre">next</span></code> 的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 有 5 字节长，但编码 <code class="docutils literal"><span class="pre">new</span></code> 的长度只需要 1 字节</li>
+</ol>
+<p>对于情况 1 和 3 ，
+程序直接更新 <code class="docutils literal"><span class="pre">next</span></code> 的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 域。</p>
+<p>如果是第二种情况，
+那么程序必须对 ziplist 进行内存重分配，
+从而扩展 <code class="docutils literal"><span class="pre">next</span></code> 的空间。
+然而，因为 <code class="docutils literal"><span class="pre">next</span></code> 的空间长度改变了，
+所以程序又必须检查 <code class="docutils literal"><span class="pre">next</span></code> 的后继节点 —— <code class="docutils literal"><span class="pre">next+1</span></code> ，
+看它的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 能否编码 <code class="docutils literal"><span class="pre">next</span></code> 的新长度，
+如果不能的话，程序又需要继续对 <code class="docutils literal"><span class="pre">next+1</span></code> 进行扩容。。。</p>
+<p>这就是说，
+在某个/某些节点的前面添加新节点之后，
+程序必须沿着路径挨个检查后续的节点，是否满足新长度的编码要求，
+直到遇到一个能满足要求的节点（如果有一个能满足，则这个节点之后的其他节点也满足），
+或者到达 ziplist 的末端 <code class="docutils literal"><span class="pre">zlend</span></code> 为止，
+这种检查操作的复杂度为 <span class="math">\(O(N^2)\)</span> 。</p>
+<p>不过，因为只有在新添加节点的后面有连续多个长度接近 254 的节点时，
+这种连锁更新才会发生，
+所以可以普遍地认为，
+这种连锁更新发生的概率非常小，
+在一般情况下，
+将添加操作看成是 <span class="math">\(O(N)\)</span> 复杂度也是可以的。</p>
+<p>执行完这三种情况的其中一种后，
+程序更新 ziplist 的各项属性，
+至此，添加操作完成。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">在第三种情况中，程序实际上是可以执行类似于情况二的动作的：
+它可以挨个地检查新节点之后的节点，
+尝试收缩它们的空间长度，
+不过 Redis 决定不这么做，
+因为在一些情况下，比如前面提到的，有连续多个长度接近 254 的节点时，
+可能会出现重复的扩展——收缩——再扩展——再收缩的抖动（flapping）效果，
+这会让操作的性能变得非常差。</p>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>删除节点<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>删除节点和添加操作的步骤类似。</p>
+<p>1) 定位目标节点，并计算节点的空间长度 <code class="docutils literal"><span class="pre">target-size</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre>   <span class="n">target</span> <span class="n">start</span> <span class="n">here</span>
+           <span class="o">|</span>
+           <span class="n">V</span>
+<span class="o">+----------+----------+----------+----------+----------+----------+</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">|</span>   <span class="n">prev</span>   <span class="o">|</span>  <span class="n">target</span>  <span class="o">|</span>   <span class="n">next</span>   <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">|</span>   <span class="p">...</span>    <span class="o">|</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">+----------+----------+----------+----------+----------+----------+</span>
+
+           <span class="o">|&lt;--------&gt;|</span>
+            <span class="n">target</span><span class="o">-</span><span class="n">size</span>
+</pre></div>
+</div>
+<p>2) 进行内存移位，覆盖 <code class="docutils literal"><span class="pre">target</span></code> 原本的数据，然后通过内存重分配，收缩多余空间：</p>
+<div class="highlight-c"><div class="highlight"><pre>   <span class="n">target</span> <span class="n">start</span> <span class="n">here</span>
+           <span class="o">|</span>
+           <span class="n">V</span>
+<span class="o">+----------+----------+----------+----------+----------+</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">|</span>   <span class="n">prev</span>   <span class="o">|</span>   <span class="n">next</span>   <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">|</span> <span class="n">next</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">|</span>   <span class="p">...</span>    <span class="o">|</span>
+<span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+<span class="o">+----------+----------+----------+----------+----------+</span>
+
+           <span class="o">|</span> <span class="o">&lt;------------------------------------------</span> <span class="n">memmove</span>
+</pre></div>
+</div>
+<p>3) 检查 <code class="docutils literal"><span class="pre">next</span></code> 、 <code class="docutils literal"><span class="pre">next+1</span></code> 等后续节点能否满足新前驱节点的编码。和添加操作一样，删除操作也可能会引起连锁更新。</p>
+</div>
+<div class="section" id="id7">
+<h2>遍历<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>可以对 ziplist 进行从前向后的遍历，或者从后先前的遍历。</p>
+<p>当进行从前向后的遍历时，
+程序从指向节点 <code class="docutils literal"><span class="pre">e1</span></code> 的指针 <code class="docutils literal"><span class="pre">p</span></code> 开始，
+计算节点 <code class="docutils literal"><span class="pre">e1</span></code> 的长度（<code class="docutils literal"><span class="pre">e1-size</span></code>），
+然后将 <code class="docutils literal"><span class="pre">p</span></code> 加上 <code class="docutils literal"><span class="pre">e1-size</span></code> ，
+就将指针后移到了下一个节点 <code class="docutils literal"><span class="pre">e2</span></code> 。。。
+如此反覆，直到 <code class="docutils literal"><span class="pre">p</span></code> 遇到 <code class="docutils literal"><span class="pre">ZIPLIST_ENTRY_END</span></code> 为止，
+这样整个 ziplist 就遍历完了：</p>
+<div class="highlight-c"><div class="highlight"><pre>                               <span class="n">p</span> <span class="o">+</span> <span class="n">e1</span><span class="o">-</span><span class="n">size</span> <span class="o">+</span> <span class="n">e2</span><span class="o">-</span><span class="n">size</span>
+                 <span class="n">p</span> <span class="o">+</span> <span class="n">e1</span><span class="o">-</span><span class="n">size</span>     <span class="o">|</span>
+           <span class="n">p</span>          <span class="o">|</span>          <span class="o">|</span>
+           <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>
+           <span class="n">V</span>          <span class="n">V</span>          <span class="n">V</span>
+<span class="o">+----------+----------+----------+----------+----------+----------+----------+</span>
+<span class="o">|</span> <span class="n">ZIPLIST</span>  <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span> <span class="n">ZIPLIST</span>  <span class="o">|</span>
+<span class="o">|</span> <span class="n">ENTRY</span>    <span class="o">|</span>    <span class="n">e1</span>    <span class="o">|</span>    <span class="n">e2</span>    <span class="o">|</span>    <span class="n">e3</span>    <span class="o">|</span>    <span class="n">e4</span>    <span class="o">|</span>   <span class="p">...</span>    <span class="o">|</span> <span class="n">ENTRY</span>    <span class="o">|</span>
+<span class="o">|</span> <span class="n">HEAD</span>     <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span> <span class="n">END</span>      <span class="o">|</span>
+<span class="o">+----------+----------+----------+----------+----------+----------+----------+</span>
+
+           <span class="o">|&lt;--------&gt;|&lt;--------&gt;|</span>
+             <span class="n">e1</span><span class="o">-</span><span class="n">size</span>    <span class="n">e2</span><span class="o">-</span><span class="n">size</span>
+</pre></div>
+</div>
+<p>当进行从后往前遍历的时候，
+程序从指向节点 <code class="docutils literal"><span class="pre">eN</span></code> 的指针 <code class="docutils literal"><span class="pre">p</span></code> 出发，
+取出 <code class="docutils literal"><span class="pre">eN</span></code> 的 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> 值，
+然后用 <code class="docutils literal"><span class="pre">p</span></code> 减去 <code class="docutils literal"><span class="pre">pre_entry_length</span></code> ，
+这就将指针移动到了前一个节点 <code class="docutils literal"><span class="pre">eN-1</span></code> 。。。
+如此反覆，直到 <code class="docutils literal"><span class="pre">p</span></code> 遇到 <code class="docutils literal"><span class="pre">ZIPLIST_ENTRY_HEAD</span></code> 为止，
+这样整个 ziplist 就遍历完了。</p>
+<div class="highlight-c"><div class="highlight"><pre>                                         <span class="n">p</span> <span class="o">-</span> <span class="n">eN</span><span class="p">.</span><span class="n">pre_entry_length</span>
+                                            <span class="o">|</span>
+                                            <span class="o">|</span>          <span class="n">p</span>
+                                            <span class="o">|</span>          <span class="o">|</span>
+                                            <span class="n">V</span>          <span class="n">V</span>
+<span class="o">+----------+----------+----------+----------+----------+----------+----------+</span>
+<span class="o">|</span> <span class="n">ZIPLIST</span>  <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span> <span class="n">ZIPLIST</span>  <span class="o">|</span>
+<span class="o">|</span> <span class="n">ENTRY</span>    <span class="o">|</span>    <span class="n">e1</span>    <span class="o">|</span>    <span class="n">e2</span>    <span class="o">|</span>   <span class="p">...</span>    <span class="o">|</span>   <span class="n">eN</span><span class="o">-</span><span class="mi">1</span>   <span class="o">|</span>    <span class="n">eN</span>    <span class="o">|</span> <span class="n">ENTRY</span>    <span class="o">|</span>
+<span class="o">|</span> <span class="n">HEAD</span>     <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span>          <span class="o">|</span> <span class="n">END</span>      <span class="o">|</span>
+<span class="o">+----------+----------+----------+----------+----------+----------+----------+</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id8">
+<h2>查找元素、根据值定位节点<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<p>这两个操作和遍历的原理基本相同，不再赘述。</p>
+</div>
+<div class="section" id="id9">
+<h2>小结<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
+<ul>
+<li><p class="first">ziplist 是由一系列特殊编码的内存块构成的列表，可以保存字符数组或整数值，同时是哈希键、列表键和有序集合键的底层实现之一。</p>
+</li>
+<li><p class="first">ziplist 典型分布结构如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;----</span> <span class="n">ziplist</span> <span class="n">header</span> <span class="o">----&gt;|&lt;-----------</span> <span class="n">entries</span> <span class="o">-------------&gt;|&lt;-</span><span class="n">end</span><span class="o">-&gt;|</span>
+
+<span class="n">size</span>          <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">4</span> <span class="n">bytes</span>  <span class="mi">2</span> <span class="n">bytes</span>    <span class="o">?</span>        <span class="o">?</span>        <span class="o">?</span>        <span class="o">?</span>     <span class="mi">1</span> <span class="n">byte</span>
+            <span class="o">+---------+--------+-------+--------+--------+--------+--------+-------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">zlbytes</span> <span class="o">|</span> <span class="n">zltail</span> <span class="o">|</span> <span class="n">zllen</span> <span class="o">|</span> <span class="n">entry1</span> <span class="o">|</span> <span class="n">entry2</span> <span class="o">|</span>  <span class="p">...</span>   <span class="o">|</span> <span class="n">entryN</span> <span class="o">|</span> <span class="n">zlend</span> <span class="o">|</span>
+            <span class="o">+---------+--------+-------+--------+--------+--------+--------+-------+</span>
+                                       <span class="o">^</span>                          <span class="o">^</span>        <span class="o">^</span>
+<span class="n">address</span>                                <span class="o">|</span>                          <span class="o">|</span>        <span class="o">|</span>
+                                <span class="n">ZIPLIST_ENTRY_HEAD</span>                <span class="o">|</span>   <span class="n">ZIPLIST_ENTRY_END</span>
+                                                                  <span class="o">|</span>
+                                                         <span class="n">ZIPLIST_ENTRY_TAIL</span>
+</pre></div>
+</div>
+</li>
+<li><p class="first">ziplist 节点的分布结构如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">area</span>        <span class="o">|&lt;-------------------</span> <span class="n">entry</span> <span class="o">--------------------&gt;|</span>
+
+            <span class="o">+------------------+----------+--------+---------+</span>
+<span class="n">component</span>   <span class="o">|</span> <span class="n">pre_entry_length</span> <span class="o">|</span> <span class="n">encoding</span> <span class="o">|</span> <span class="n">length</span> <span class="o">|</span> <span class="n">content</span> <span class="o">|</span>
+            <span class="o">+------------------+----------+--------+---------+</span>
+</pre></div>
+</div>
+</li>
+<li><p class="first">添加和删除 ziplist 节点有可能会引起连锁更新，因此，添加和删除操作的最坏复杂度为 <span class="math">\(O(N^2)\)</span> ，不过，因为连锁更新的出现概率并不高，所以一般可以将添加和删除操作的复杂度视为 <span class="math">\(O(N)\)</span> 。</p>
+</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../datatype/object.html" title="对象处理机制"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="intset.html" title="整数集合"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

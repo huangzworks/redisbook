@@ -1,4 +1,0 @@
-make latex &&
-cd _build/latex/ &&
-xelatex Redis.tex &&
-mv Redis.pdf ../../

@@ -1,0 +1,916 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>AOF &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="事件" href="ae.html" />
+    <link rel="prev" title="RDB" href="rdb.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="ae.html" title="事件"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="rdb.html" title="RDB"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="aof">
+<h1>AOF<a class="headerlink" href="#aof" title="Permalink to this headline">¶</a></h1>
+<p>Redis 分别提供了 RDB 和 AOF 两种持久化机制：</p>
+<ul class="simple">
+<li>RDB 将数据库的快照（snapshot）以二进制的方式保存到磁盘中。</li>
+<li>AOF 则以协议文本的方式，将所有对数据库进行过写入的命令（及其参数）记录到 AOF 文件，以此达到记录数据库状态的目的。</li>
+</ul>
+<p class="graphviz">
+<img src="../_images/graphviz-a7c5f2bb064f2c0307d15dca06d7d31d3adfc032.svg" alt="digraph persistent {
+
+    rankdir = LR;
+
+    node [shape = circle, style = filled];
+
+    edge [style = &quot;dashed, bold&quot;];
+
+    // node
+
+    client [label = &quot;客户端&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    server [label = &quot;服务器&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    aof [label = &quot;AOF \n 文件&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    // edge
+
+    client -&gt; server [label = &quot;命令请求&quot;];
+    server -&gt; aof [ label = &quot;网络协议格式的\n命令内容&quot;];
+}" />
+</p>
+<p>本章首先介绍 AOF 功能的运作机制，
+了解命令是如何被保存到 AOF 文件里的，
+观察不同的 AOF 保存模式对数据的安全性、以及 Redis 性能的影响。</p>
+<p>之后会介绍从 AOF 文件中恢复数据库状态的方法，以及该方法背后的实现机制。</p>
+<p>最后还会介绍对 AOF 进行重写以调整文件体积的方法，
+并研究这种方法是如何在不改变数据库状态的前提下进行的。</p>
+<p>因为本章涉及 AOF 运行的相关机制，
+如果还没了解过 AOF 功能的话，
+请先阅读 <a class="reference external" href="http://redis.io/topics/persistence">Redis 持久化手册中关于 AOF 的部分</a> 。</p>
+<div class="section" id="id1">
+<h2>AOF 命令同步<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
+<p>Redis 将所有对数据库进行过写入的命令（及其参数）记录到 AOF 文件，
+以此达到记录数据库状态的目的，
+为了方便起见，
+我们称呼这种记录过程为同步。</p>
+<p>举个例子，
+如果执行以下命令：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">RPUSH</span> <span class="n">list</span> <span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span> <span class="mi">4</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">4</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">LRANGE</span> <span class="n">list</span> <span class="mi">0</span> <span class="o">-</span><span class="mi">1</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s">&quot;1&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s">&quot;2&quot;</span>
+<span class="mi">3</span><span class="p">)</span> <span class="s">&quot;3&quot;</span>
+<span class="mi">4</span><span class="p">)</span> <span class="s">&quot;4&quot;</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">KEYS</span> <span class="o">*</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s">&quot;list&quot;</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">RPOP</span> <span class="n">list</span>
+<span class="s">&quot;4&quot;</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">LPOP</span> <span class="n">list</span>
+<span class="s">&quot;1&quot;</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">LPUSH</span> <span class="n">list</span> <span class="mi">1</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">3</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">LRANGE</span> <span class="n">list</span> <span class="mi">0</span> <span class="o">-</span><span class="mi">1</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s">&quot;1&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s">&quot;2&quot;</span>
+<span class="mi">3</span><span class="p">)</span> <span class="s">&quot;3&quot;</span>
+</pre></div>
+</div>
+<p>那么其中四条对数据库有修改的写入命令就会被同步到 AOF 文件中：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">RPUSH</span> <span class="n">list</span> <span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span> <span class="mi">4</span>
+
+<span class="n">RPOP</span> <span class="n">list</span>
+
+<span class="n">LPOP</span> <span class="n">list</span>
+
+<span class="n">LPUSH</span> <span class="n">list</span> <span class="mi">1</span>
+</pre></div>
+</div>
+<p>为了处理的方便，
+AOF 文件使用网络通讯协议的格式来保存这些命令。</p>
+<p>比如说，
+上面列举的四个命令在 AOF 文件中就实际保存如下：</p>
+<div class="highlight-c"><div class="highlight"><pre>*2
+$6
+SELECT
+$1
+0
+*6
+$5
+RPUSH
+$4
+list
+$1
+1
+$1
+2
+$1
+3
+$1
+4
+*2
+$4
+RPOP
+$4
+list
+*2
+$4
+LPOP
+$4
+list
+*3
+$5
+LPUSH
+$4
+list
+$1
+1
+</pre></div>
+</div>
+<p>除了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/connection/select.html#select" title="(in Redis 命令参考 v2.8)"><em>SELECT</em></a> 命令是 AOF 程序自己加上去的之外，
+其他命令都是之前我们在终端里执行的命令。</p>
+<p>同步命令到 AOF 文件的整个过程可以分为三个阶段：</p>
+<ol class="arabic simple">
+<li>命令传播：Redis 将执行完的命令、命令的参数、命令的参数个数等信息发送到 AOF 程序中。</li>
+<li>缓存追加：AOF 程序根据接收到的命令数据，将命令转换为网络通讯协议的格式，然后将协议内容追加到服务器的 AOF 缓存中。</li>
+<li>文件写入和保存：AOF 缓存中的内容被写入到 AOF 文件末尾，如果设定的 AOF 保存条件被满足的话， <code class="docutils literal"><span class="pre">fsync</span></code> 函数或者 <code class="docutils literal"><span class="pre">fdatasync</span></code> 函数会被调用，将写入的内容真正地保存到磁盘中。</li>
+</ol>
+<p>以下几个小节将详细地介绍这三个步骤。</p>
+</div>
+<div class="section" id="id2">
+<h2>命令传播<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>当一个 Redis 客户端需要执行命令时，
+它通过网络连接，
+将协议文本发送给 Redis 服务器。</p>
+<p>比如说，
+要执行命令 <code class="docutils literal"><span class="pre">SET</span> <span class="pre">KEY</span> <span class="pre">VALUE</span></code> ，
+客户端将向服务器发送文本 <code class="docutils literal"><span class="pre">&quot;*3\r\n$3\r\nSET\r\n$3\r\nKEY\r\n$5\r\nVALUE\r\n&quot;</span></code> 。</p>
+<p>服务器在接到客户端的请求之后，
+它会根据协议文本的内容，
+选择适当的命令函数，
+并将各个参数从字符串文本转换为 Redis 字符串对象（<code class="docutils literal"><span class="pre">StringObject</span></code>）。</p>
+<p>比如说，
+针对上面的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 命令例子，
+Redis 将客户端的命令指针指向实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 命令的 <code class="docutils literal"><span class="pre">setCommand</span></code> 函数，
+并创建三个 Redis 字符串对象，
+分别保存 <code class="docutils literal"><span class="pre">SET</span></code> 、 <code class="docutils literal"><span class="pre">KEY</span></code> 和 <code class="docutils literal"><span class="pre">VALUE</span></code> 三个参数（命令也算作参数）。</p>
+<p>每当命令函数成功执行之后，
+命令参数都会被传播到 AOF 程序，
+以及 REPLICATION 程序（本节不讨论这个，列在这里只是为了完整性的考虑）。</p>
+<p>这个执行并传播命令的过程可以用以下伪代码表示：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">if</span> <span class="p">(</span><span class="n">execRedisCommand</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="n">argc</span><span class="p">)</span> <span class="o">==</span> <span class="n">EXEC_SUCCESS</span><span class="p">):</span>
+
+    <span class="k">if</span> <span class="n">aof_is_turn_on</span><span class="p">():</span>
+        <span class="c"># 传播命令到 AOF 程序</span>
+        <span class="n">propagate_aof</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="n">argc</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">replication_is_turn_on</span><span class="p">():</span>
+        <span class="c"># 传播命令到 REPLICATION 程序</span>
+        <span class="n">propagate_replication</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="n">argc</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>以下是该过程的流程图：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-a5c804211267a10a5c3ffa47c5b600727191a3be.svg" alt="digraph propagate {
+
+    node [shape = plaintext, style = filled];
+
+    edge [style = bold];
+
+    // node 
+
+    exec [label = &quot;命令执行成功&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    aof_choice [label = &quot;AOF\n 功能已打开？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    propagate_aof [label = &quot;传播命令到 AOF 程序&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    replication_choice [label = &quot;REPLICATION\n 功能已打开？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    propagate_replication [label = &quot;传播命令到 REPLICATION 程序&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    remaind_jobs [label = &quot;处理后续步骤：\n清理资源、\n等等&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    // edge
+
+    exec -&gt; aof_choice;
+
+    aof_choice -&gt; propagate_aof [label = &quot;是&quot;];
+
+    propagate_aof -&gt; replication_choice;
+
+    aof_choice -&gt; replication_choice [label = &quot;否&quot;];
+
+    replication_choice -&gt; remaind_jobs [label = &quot;否&quot;];
+
+    replication_choice -&gt; propagate_replication [label = &quot;是&quot;];
+
+    propagate_replication -&gt; remaind_jobs;
+}" />
+</p>
+</div>
+<div class="section" id="id3">
+<h2>缓存追加<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>当命令被传播到 AOF 程序之后，
+程序会根据命令以及命令的参数，
+将命令从字符串对象转换回原来的协议文本。</p>
+<p>比如说，
+如果 AOF 程序接受到的三个参数分别保存着 <code class="docutils literal"><span class="pre">SET</span></code> 、 <code class="docutils literal"><span class="pre">KEY</span></code> 和 <code class="docutils literal"><span class="pre">VALUE</span></code> 三个字符串，
+那么它将生成协议文本 <code class="docutils literal"><span class="pre">&quot;*3\r\n$3\r\nSET\r\n$3\r\nKEY\r\n$5\r\nVALUE\r\n&quot;</span></code> 。</p>
+<p>协议文本生成之后，
+它会被追加到 <code class="docutils literal"><span class="pre">redis.h/redisServer</span></code> 结构的 <code class="docutils literal"><span class="pre">aof_buf</span></code> 末尾。</p>
+<p><code class="docutils literal"><span class="pre">redisServer</span></code> 结构维持着 Redis 服务器的状态，
+<code class="docutils literal"><span class="pre">aof_buf</span></code> 域则保存着所有等待写入到 AOF 文件的协议文本：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">struct</span> <span class="n">redisServer</span> <span class="p">{</span>
+
+    <span class="c1">// 其他域...</span>
+
+    <span class="n">sds</span> <span class="n">aof_buf</span><span class="p">;</span>
+
+    <span class="c1">// 其他域...</span>
+<span class="p">};</span>
+</pre></div>
+</div>
+<p>至此，
+追加命令到缓存的步骤执行完毕。</p>
+<p>综合起来，整个缓存追加过程可以分为以下三步：</p>
+<ol class="arabic simple">
+<li>接受命令、命令的参数、以及参数的个数、所使用的数据库等信息。</li>
+<li>将命令还原成 Redis 网络通讯协议。</li>
+<li>将协议文本追加到 <code class="docutils literal"><span class="pre">aof_buf</span></code> 末尾。</li>
+</ol>
+</div>
+<div class="section" id="id4">
+<h2>文件写入和保存<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>每当服务器常规任务函数被执行、
+或者事件处理器被执行时，
+<code class="docutils literal"><span class="pre">aof.c/flushAppendOnlyFile</span></code> 函数都会被调用，
+这个函数执行以下两个工作：</p>
+<p>WRITE：根据条件，将 <code class="docutils literal"><span class="pre">aof_buf</span></code> 中的缓存写入到 AOF 文件。</p>
+<p>SAVE：根据条件，调用 <code class="docutils literal"><span class="pre">fsync</span></code> 或 <code class="docutils literal"><span class="pre">fdatasync</span></code> 函数，将 AOF 文件保存到磁盘中。</p>
+<p>两个步骤都需要根据一定的条件来执行，
+而这些条件由 AOF 所使用的保存模式来决定，
+以下小节就来介绍 AOF 所使用的三种保存模式，
+以及在这些模式下，
+步骤 WRITE 和 SAVE 的调用条件。</p>
+</div>
+<div class="section" id="id5">
+<h2>AOF 保存模式<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>Redis 目前支持三种 AOF 保存模式，它们分别是：</p>
+<ol class="arabic simple">
+<li><code class="docutils literal"><span class="pre">AOF_FSYNC_NO</span></code> ：不保存。</li>
+<li><code class="docutils literal"><span class="pre">AOF_FSYNC_EVERYSEC</span></code> ：每一秒钟保存一次。</li>
+<li><code class="docutils literal"><span class="pre">AOF_FSYNC_ALWAYS</span></code> ：每执行一个命令保存一次。</li>
+</ol>
+<p>以下三个小节将分别讨论这三种保存模式。</p>
+<div class="section" id="id6">
+<h3>不保存<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h3>
+<p>在这种模式下，
+每次调用 <code class="docutils literal"><span class="pre">flushAppendOnlyFile</span></code> 函数，
+WRITE 都会被执行，
+但 SAVE 会被略过。</p>
+<p>在这种模式下， SAVE 只会在以下任意一种情况中被执行：</p>
+<ul class="simple">
+<li>Redis 被关闭</li>
+<li>AOF 功能被关闭</li>
+<li>系统的写缓存被刷新（可能是缓存已经被写满，或者定期保存操作被执行）</li>
+</ul>
+<p>这三种情况下的 SAVE 操作都会引起 Redis 主进程阻塞。</p>
+</div>
+<div class="section" id="id7">
+<h3>每一秒钟保存一次<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h3>
+<p>在这种模式中，
+SAVE 原则上每隔一秒钟就会执行一次，
+因为 SAVE 操作是由后台子线程调用的，
+所以它不会引起服务器主进程阻塞。</p>
+<p>注意，
+在上一句的说明里面使用了词语“原则上”，
+在实际运行中，
+程序在这种模式下对 <code class="docutils literal"><span class="pre">fsync</span></code> 或 <code class="docutils literal"><span class="pre">fdatasync</span></code> 的调用并不是每秒一次，
+它和调用 <code class="docutils literal"><span class="pre">flushAppendOnlyFile</span></code> 函数时 Redis 所处的状态有关。</p>
+<p>每当 <code class="docutils literal"><span class="pre">flushAppendOnlyFile</span></code> 函数被调用时，
+可能会出现以下四种情况：</p>
+<ul>
+<li><p class="first">子线程正在执行 SAVE ，并且：</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li>这个 SAVE 的执行时间未超过 2 秒，那么程序直接返回，并不执行 WRITE 或新的 SAVE 。</li>
+<li>这个 SAVE 已经执行超过 2 秒，那么程序执行 WRITE ，但不执行新的 SAVE 。注意，因为这时 WRITE 的写入必须等待子线程先完成（旧的） SAVE ，因此这里 WRITE 会比平时阻塞更长时间。</li>
+</ol>
+</div></blockquote>
+</li>
+<li><p class="first">子线程没有在执行 SAVE ，并且：</p>
+<blockquote>
+<div><ol class="arabic simple" start="3">
+<li>上次成功执行 SAVE 距今不超过 1 秒，那么程序执行 WRITE ，但不执行 SAVE 。</li>
+<li>上次成功执行 SAVE 距今已经超过 1 秒，那么程序执行 WRITE 和 SAVE 。</li>
+</ol>
+</div></blockquote>
+</li>
+</ul>
+<p>可以用流程图表示这四种情况：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-1b226a6d0f09ed1b61a30d899372834634b96504.svg" alt="digraph flush {
+
+    node [shape = plaintext, style = filled, fillcolor = &quot;#FADCAD&quot;];
+
+    edge [style = bold];
+
+    //
+
+    SAVE_running_choice [label = &quot;SAVE 正在执行？&quot;, shape = diamond, fillcolor = &quot;#A8E270&quot;];
+
+    over_2_second_choice [label = &quot;运行时间\n超过 2 秒？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    not_over_2_second [label = &quot;情况 1 ：\n函数直接返回\n 不执行 WRITE 或\n新的 SAVE&quot;];
+
+    over_2_second [label = &quot;情况 2 ：\n执行 WRITE \n 但不执行新的 SAVE \n&quot;];
+
+    SAVE_running_choice -&gt; over_2_second_choice [label = &quot;是&quot;];
+
+    over_2_second_choice -&gt; not_over_2_second [label = &quot;否&quot;];
+
+    over_2_second_choice -&gt; over_2_second [label = &quot;是&quot;];
+
+    finish_over_2_second [label = &quot;距离上次 SAVE\n 执行成功\n超过 1 秒？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    no [label = &quot;情况 3 ：\n 执行 WRITE \n 但不执行新的 SAVE &quot;];
+
+    yes [label = &quot;情况 4 ：\n 执行 WRITE 和\n新的 SAVE\n&quot;];
+
+    SAVE_running_choice -&gt; finish_over_2_second [label = &quot;否&quot;];
+
+    finish_over_2_second -&gt; yes [label = &quot;是&quot;];
+
+    finish_over_2_second -&gt; no [label = &quot;否&quot;];
+
+}" />
+</p>
+<p>根据以上说明可以知道，
+在“每一秒钟保存一次”模式下，
+如果在情况 1 中发生故障停机，
+那么用户最多损失小于 2 秒内所产生的所有数据。</p>
+<p>如果在情况 2 中发生故障停机，
+那么用户损失的数据是可以超过 2 秒的。</p>
+<p>Redis 官网上所说的，
+AOF 在“每一秒钟保存一次”时发生故障，
+只丢失 1 秒钟数据的说法，
+实际上并不准确。</p>
+</div>
+<div class="section" id="id8">
+<h3>每执行一个命令保存一次<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h3>
+<p>在这种模式下，每次执行完一个命令之后， WRITE 和 SAVE 都会被执行。</p>
+<p>另外，因为 SAVE 是由 Redis 主进程执行的，所以在 SAVE 执行期间，主进程会被阻塞，不能接受命令请求。</p>
+</div>
+</div>
+<div class="section" id="id9">
+<h2>AOF 保存模式对性能和安全性的影响<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
+<p>在上一个小节，
+我们简短地描述了三种 AOF 保存模式的工作方式，
+现在，
+是时候研究一下这三个模式在安全性和性能方面的区别了。</p>
+<p>对于三种 AOF 保存模式，
+它们对服务器主进程的阻塞情况如下：</p>
+<ol class="arabic simple">
+<li>不保存（<code class="docutils literal"><span class="pre">AOF_FSYNC_NO</span></code>）：写入和保存都由主进程执行，两个操作都会阻塞主进程。</li>
+<li>每一秒钟保存一次（<code class="docutils literal"><span class="pre">AOF_FSYNC_EVERYSEC</span></code>）：写入操作由主进程执行，阻塞主进程。保存操作由子线程执行，不直接阻塞主进程，但保存操作完成的快慢会影响写入操作的阻塞时长。</li>
+<li>每执行一个命令保存一次（<code class="docutils literal"><span class="pre">AOF_FSYNC_ALWAYS</span></code>）：和模式 1 一样。</li>
+</ol>
+<p>因为阻塞操作会让 Redis 主进程无法持续处理请求，
+所以一般说来，
+阻塞操作执行得越少、完成得越快，
+Redis 的性能就越好。</p>
+<p>模式 1 的保存操作只会在AOF 关闭或 Redis 关闭时执行，
+或者由操作系统触发，
+在一般情况下，
+这种模式只需要为写入阻塞，
+因此它的写入性能要比后面两种模式要高，
+当然，
+这种性能的提高是以降低安全性为代价的：
+在这种模式下，
+如果运行的中途发生停机，
+那么丢失数据的数量由操作系统的缓存冲洗策略决定。</p>
+<p>模式 2 在性能方面要优于模式 3 ，
+并且在通常情况下，
+这种模式最多丢失不多于 2 秒的数据，
+所以它的安全性要高于模式 1 ，
+这是一种兼顾性能和安全性的保存方案。</p>
+<p>模式 3 的安全性是最高的，
+但性能也是最差的，
+因为服务器必须阻塞直到命令信息被写入并保存到磁盘之后，
+才能继续处理请求。</p>
+<p>综合起来，三种 AOF 模式的操作特性可以总结如下：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="18%" />
+<col width="16%" />
+<col width="16%" />
+<col width="50%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">模式</th>
+<th class="head">WRITE 是否阻塞？</th>
+<th class="head">SAVE 是否阻塞？</th>
+<th class="head">停机时丢失的数据量</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">AOF_FSYNC_NO</span></code></td>
+<td>阻塞</td>
+<td>阻塞</td>
+<td>操作系统最后一次对 AOF 文件触发 SAVE 操作之后的数据。</td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">AOF_FSYNC_EVERYSEC</span></code></td>
+<td>阻塞</td>
+<td>不阻塞</td>
+<td>一般情况下不超过 2 秒钟的数据。</td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">AOF_FSYNC_ALWAYS</span></code></td>
+<td>阻塞</td>
+<td>阻塞</td>
+<td>最多只丢失一个命令的数据。</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="id10">
+<h2>AOF 文件的读取和数据还原<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h2>
+<p>AOF 文件保存了 Redis 的数据库状态，
+而文件里面包含的都是符合 Redis 通讯协议格式的命令文本。</p>
+<p>这也就是说，
+只要根据 AOF 文件里的协议，
+重新执行一遍里面指示的所有命令，
+就可以还原 Redis 的数据库状态了。</p>
+<p>Redis 读取 AOF 文件并还原数据库的详细步骤如下：</p>
+<ol class="arabic simple">
+<li>创建一个不带网络连接的伪客户端（fake client）。</li>
+<li>读取 AOF 所保存的文本，并根据内容还原出命令、命令的参数以及命令的个数。</li>
+<li>根据命令、命令的参数和命令的个数，使用伪客户端执行该命令。</li>
+<li>执行 2 和 3 ，直到 AOF 文件中的所有命令执行完毕。</li>
+</ol>
+<p>完成第 4 步之后，
+AOF 文件所保存的数据库就会被完整地还原出来。</p>
+<p>注意，
+因为 Redis 的命令只能在客户端的上下文中被执行，
+而 AOF 还原时所使用的命令来自于 AOF 文件，
+而不是网络，
+所以程序使用了一个没有网络连接的伪客户端来执行命令。
+伪客户端执行命令的效果，
+和带网络连接的客户端执行命令的效果，
+完全一样。</p>
+<p>整个读取和还原过程可以用以下伪代码表示：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">READ_AND_LOAD_AOF</span><span class="p">():</span>
+
+    <span class="c"># 打开并读取 AOF 文件</span>
+    <span class="nb">file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">aof_file_name</span><span class="p">)</span>
+    <span class="k">while</span> <span class="nb">file</span><span class="o">.</span><span class="n">is_not_reach_eof</span><span class="p">():</span>
+
+        <span class="c"># 读入一条协议文本格式的 Redis 命令</span>
+        <span class="n">cmd_in_text</span> <span class="o">=</span> <span class="nb">file</span><span class="o">.</span><span class="n">read_next_command_in_protocol_format</span><span class="p">()</span>
+
+        <span class="c"># 根据文本命令，查找命令函数，并创建参数和参数个数等对象</span>
+        <span class="n">cmd</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="n">argc</span> <span class="o">=</span> <span class="n">text_to_command</span><span class="p">(</span><span class="n">cmd_in_text</span><span class="p">)</span>
+
+        <span class="c"># 执行命令</span>
+        <span class="n">execRedisCommand</span><span class="p">(</span><span class="n">cmd</span><span class="p">,</span> <span class="n">argv</span><span class="p">,</span> <span class="n">argc</span><span class="p">)</span>
+
+    <span class="c"># 关闭文件</span>
+    <span class="nb">file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>作为例子，
+以下是一个简短的 AOF 文件的内容：</p>
+<div class="highlight-c"><div class="highlight"><pre>*2
+$6
+SELECT
+$1
+0
+*3
+$3
+SET
+$3
+key
+$5
+value
+*8
+$5
+RPUSH
+$4
+list
+$1
+1
+$1
+2
+$1
+3
+$1
+4
+$1
+5
+$1
+6
+</pre></div>
+</div>
+<p>当程序读入这个 AOF 文件时，
+它首先执行 <code class="docutils literal"><span class="pre">SELECT</span> <span class="pre">0</span></code> 命令 ——
+这个 <code class="docutils literal"><span class="pre">SELECT</span></code> 命令是由 AOF 写入程序自动生成的，
+它确保程序可以将数据还原到正确的数据库上。</p>
+<p>然后执行后面的 <code class="docutils literal"><span class="pre">SET</span> <span class="pre">key</span> <span class="pre">value</span></code> 和 <code class="docutils literal"><span class="pre">RPUSH</span> <span class="pre">1</span> <span class="pre">2</span> <span class="pre">3</span> <span class="pre">4</span></code> 命令，
+还原 <code class="docutils literal"><span class="pre">key</span></code> 和 <code class="docutils literal"><span class="pre">list</span></code> 两个键的数据。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">为了避免对数据的完整性产生影响，
+在服务器载入数据的过程中，
+只有和数据库无关的订阅与发布功能可以正常使用，
+其他命令一律返回错误。</p>
+</div>
+</div>
+<div class="section" id="id11">
+<h2>AOF 重写<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h2>
+<p>AOF 文件通过同步 Redis 服务器所执行的命令，
+从而实现了数据库状态的记录，
+但是，
+这种同步方式会造成一个问题：
+随着运行时间的流逝，
+AOF 文件会变得越来越大。</p>
+<p>举个例子，
+如果服务器执行了以下命令：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">RPUSH</span> <span class="n">list</span> <span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span> <span class="mi">4</span>      <span class="c1">// [1, 2, 3, 4]</span>
+
+<span class="n">RPOP</span> <span class="n">list</span>               <span class="c1">// [1, 2, 3]</span>
+
+<span class="n">LPOP</span> <span class="n">list</span>               <span class="c1">// [2, 3]</span>
+
+<span class="n">LPUSH</span> <span class="n">list</span> <span class="mi">1</span>            <span class="c1">// [1, 2, 3]</span>
+</pre></div>
+</div>
+<p>那么光是记录 <code class="docutils literal"><span class="pre">list</span></code> 键的状态，
+AOF 文件就需要保存四条命令。</p>
+<p>另一方面，
+有些被频繁操作的键，
+对它们所调用的命令可能有成百上千、甚至上万条，
+如果这样被频繁操作的键有很多的话，
+AOF 文件的体积就会急速膨胀，
+对 Redis 、甚至整个系统的造成影响。</p>
+<p>为了解决以上的问题，
+Redis 需要对 AOF 文件进行重写（rewrite）：
+创建一个新的 AOF 文件来代替原有的 AOF 文件，
+新 AOF 文件和原有 AOF 文件保存的数据库状态完全一样，
+但新 AOF 文件的体积小于等于原有 AOF 文件的体积。</p>
+<p>以下就来介绍 AOF 重写的实现方式。</p>
+</div>
+<div class="section" id="id12">
+<h2>AOF 重写的实现<a class="headerlink" href="#id12" title="Permalink to this headline">¶</a></h2>
+<p>所谓的“重写”其实是一个有歧义的词语，
+实际上，
+AOF 重写并不需要对原有的 AOF 文件进行任何写入和读取，
+它针对的是数据库中键的当前值。</p>
+<p>考虑这样一个情况，
+如果服务器对键 <code class="docutils literal"><span class="pre">list</span></code> 执行了以下四条命令：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">RPUSH</span> <span class="n">list</span> <span class="mi">1</span> <span class="mi">2</span> <span class="mi">3</span> <span class="mi">4</span>      <span class="c1">// [1, 2, 3, 4]</span>
+
+<span class="n">RPOP</span> <span class="n">list</span>               <span class="c1">// [1, 2, 3]</span>
+
+<span class="n">LPOP</span> <span class="n">list</span>               <span class="c1">// [2, 3]</span>
+
+<span class="n">LPUSH</span> <span class="n">list</span> <span class="mi">1</span>            <span class="c1">// [1, 2, 3]</span>
+</pre></div>
+</div>
+<p>那么当前列表键 <code class="docutils literal"><span class="pre">list</span></code> 在数据库中的值就为 <code class="docutils literal"><span class="pre">[1,</span> <span class="pre">2,</span> <span class="pre">3]</span></code> 。</p>
+<p>如果我们要保存这个列表的当前状态，
+并且尽量减少所使用的命令数，
+那么最简单的方式不是去 AOF 文件上分析前面执行的四条命令，
+而是直接读取 <code class="docutils literal"><span class="pre">list</span></code> 键在数据库的当前值，
+然后用一条 <code class="docutils literal"><span class="pre">RPUSH</span> <span class="pre">1</span> <span class="pre">2</span> <span class="pre">3</span></code> 命令来代替前面的四条命令。</p>
+<p>再考虑这样一个例子，
+如果服务器对集合键 <code class="docutils literal"><span class="pre">animal</span></code> 执行了以下命令：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">SADD</span> <span class="n">animal</span> <span class="n">cat</span>                 <span class="c1">// {cat}</span>
+
+<span class="n">SADD</span> <span class="n">animal</span> <span class="n">dog</span> <span class="n">panda</span> <span class="n">tiger</span>     <span class="c1">// {cat, dog, panda, tiger}</span>
+
+<span class="n">SREM</span> <span class="n">animal</span> <span class="n">cat</span>                 <span class="c1">// {dog, panda, tiger}</span>
+
+<span class="n">SADD</span> <span class="n">animal</span> <span class="n">cat</span> <span class="n">lion</span>            <span class="c1">// {cat, lion, dog, panda, tiger}</span>
+</pre></div>
+</div>
+<p>那么使用一条 <code class="docutils literal"><span class="pre">SADD</span> <span class="pre">animal</span> <span class="pre">cat</span> <span class="pre">lion</span> <span class="pre">dog</span> <span class="pre">panda</span> <span class="pre">tiger</span></code> 命令，
+就可以还原 <code class="docutils literal"><span class="pre">animal</span></code> 集合的状态，
+这比之前的四条命令调用要大大减少。</p>
+<p>除了列表和集合之外，
+字符串、有序集、哈希表等键也可以用类似的方法来保存状态，
+并且保存这些状态所使用的命令数量，
+比起之前建立这些键的状态所使用命令的数量要大大减少。</p>
+<p>根据键的类型，
+使用适当的写入命令来重现键的当前值，
+这就是 AOF 重写的实现原理。
+整个重写过程可以用伪代码表示如下：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">AOF_REWRITE</span><span class="p">(</span><span class="n">tmp_tile_name</span><span class="p">):</span>
+
+  <span class="n">f</span> <span class="o">=</span> <span class="n">create</span><span class="p">(</span><span class="n">tmp_tile_name</span><span class="p">)</span>
+
+  <span class="c"># 遍历所有数据库</span>
+  <span class="k">for</span> <span class="n">db</span> <span class="ow">in</span> <span class="n">redisServer</span><span class="o">.</span><span class="n">db</span><span class="p">:</span>
+
+    <span class="c"># 如果数据库为空，那么跳过这个数据库</span>
+    <span class="k">if</span> <span class="n">db</span><span class="o">.</span><span class="n">is_empty</span><span class="p">():</span> <span class="k">continue</span>
+
+    <span class="c"># 写入 SELECT 命令，用于切换数据库</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">write_command</span><span class="p">(</span><span class="s">&quot;SELECT &quot;</span> <span class="o">+</span> <span class="n">db</span><span class="o">.</span><span class="n">number</span><span class="p">)</span>
+
+    <span class="c"># 遍历所有键</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">db</span><span class="p">:</span>
+
+      <span class="c"># 如果键带有过期时间，并且已经过期，那么跳过这个键</span>
+      <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">have_expire_time</span><span class="p">()</span> <span class="ow">and</span> <span class="n">key</span><span class="o">.</span><span class="n">is_expired</span><span class="p">():</span> <span class="k">continue</span>
+
+      <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">String</span><span class="p">:</span>
+
+        <span class="c"># 用 SET key value 命令来保存字符串键</span>
+
+        <span class="n">value</span> <span class="o">=</span> <span class="n">get_value_from_string</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="n">f</span><span class="o">.</span><span class="n">write_command</span><span class="p">(</span><span class="s">&quot;SET &quot;</span> <span class="o">+</span> <span class="n">key</span> <span class="o">+</span> <span class="n">value</span><span class="p">)</span>
+
+      <span class="k">elif</span> <span class="n">key</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">List</span><span class="p">:</span>
+
+        <span class="c"># 用 RPUSH key item1 item2 ... itemN 命令来保存列表键</span>
+
+        <span class="n">item1</span><span class="p">,</span> <span class="n">item2</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">itemN</span> <span class="o">=</span> <span class="n">get_item_from_list</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="n">f</span><span class="o">.</span><span class="n">write_command</span><span class="p">(</span><span class="s">&quot;RPUSH &quot;</span> <span class="o">+</span> <span class="n">key</span> <span class="o">+</span> <span class="n">item1</span> <span class="o">+</span> <span class="n">item2</span> <span class="o">+</span> <span class="o">...</span> <span class="o">+</span> <span class="n">itemN</span><span class="p">)</span>
+
+      <span class="k">elif</span> <span class="n">key</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Set</span><span class="p">:</span>
+
+        <span class="c"># 用 SADD key member1 member2 ... memberN 命令来保存集合键</span>
+
+        <span class="n">member1</span><span class="p">,</span> <span class="n">member2</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">memberN</span> <span class="o">=</span> <span class="n">get_member_from_set</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="n">f</span><span class="o">.</span><span class="n">write_command</span><span class="p">(</span><span class="s">&quot;SADD &quot;</span> <span class="o">+</span> <span class="n">key</span> <span class="o">+</span> <span class="n">member1</span> <span class="o">+</span> <span class="n">member2</span> <span class="o">+</span> <span class="o">...</span> <span class="o">+</span> <span class="n">memberN</span><span class="p">)</span>
+
+      <span class="k">elif</span> <span class="n">key</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">Hash</span><span class="p">:</span>
+
+        <span class="c"># 用 HMSET key field1 value1 field2 value2 ... fieldN valueN 命令来保存哈希键</span>
+
+        <span class="n">field1</span><span class="p">,</span> <span class="n">value1</span><span class="p">,</span> <span class="n">field2</span><span class="p">,</span> <span class="n">value2</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">fieldN</span><span class="p">,</span> <span class="n">valueN</span> <span class="o">=</span>\
+        <span class="n">get_field_and_value_from_hash</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="n">f</span><span class="o">.</span><span class="n">write_command</span><span class="p">(</span><span class="s">&quot;HMSET &quot;</span> <span class="o">+</span> <span class="n">key</span> <span class="o">+</span> <span class="n">field1</span> <span class="o">+</span> <span class="n">value1</span> <span class="o">+</span> <span class="n">field2</span> <span class="o">+</span> <span class="n">value2</span> <span class="o">+</span>\
+                        <span class="o">...</span> <span class="o">+</span> <span class="n">fieldN</span> <span class="o">+</span> <span class="n">valueN</span><span class="p">)</span>
+
+      <span class="k">elif</span> <span class="n">key</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="n">SortedSet</span><span class="p">:</span>
+
+        <span class="c"># 用 ZADD key score1 member1 score2 member2 ... scoreN memberN</span>
+        <span class="c"># 命令来保存有序集键</span>
+
+        <span class="n">score1</span><span class="p">,</span> <span class="n">member1</span><span class="p">,</span> <span class="n">score2</span><span class="p">,</span> <span class="n">member2</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">scoreN</span><span class="p">,</span> <span class="n">memberN</span> <span class="o">=</span> \
+        <span class="n">get_score_and_member_from_sorted_set</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+        <span class="n">f</span><span class="o">.</span><span class="n">write_command</span><span class="p">(</span><span class="s">&quot;ZADD &quot;</span> <span class="o">+</span> <span class="n">key</span> <span class="o">+</span> <span class="n">score1</span> <span class="o">+</span> <span class="n">member1</span> <span class="o">+</span> <span class="n">score2</span> <span class="o">+</span> <span class="n">member2</span> <span class="o">+</span>\
+                        <span class="o">...</span> <span class="o">+</span> <span class="n">scoreN</span> <span class="o">+</span> <span class="n">memberN</span><span class="p">)</span>
+
+      <span class="k">else</span><span class="p">:</span>
+
+        <span class="n">raise_type_error</span><span class="p">()</span>
+
+      <span class="c"># 如果键带有过期时间，那么用 EXPIREAT key time 命令来保存键的过期时间</span>
+      <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">have_expire_time</span><span class="p">():</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">write_command</span><span class="p">(</span><span class="s">&quot;EXPIREAT &quot;</span> <span class="o">+</span> <span class="n">key</span> <span class="o">+</span> <span class="n">key</span><span class="o">.</span><span class="n">expire_time_in_unix_timestamp</span><span class="p">())</span>
+
+    <span class="c"># 关闭文件</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id13">
+<h2>AOF 后台重写<a class="headerlink" href="#id13" title="Permalink to this headline">¶</a></h2>
+<p>上一节展示的 AOF 重写程序可以很好地完成创建一个新 AOF 文件的任务，
+但是，
+在执行这个程序的时候，
+调用者线程会被阻塞。</p>
+<p>很明显，
+作为一种辅佐性的维护手段，
+Redis 不希望 AOF 重写造成服务器无法处理请求，
+所以 Redis 决定将 AOF 重写程序放到（后台）子进程里执行，
+这样处理的最大好处是：</p>
+<ol class="arabic simple">
+<li>子进程进行 AOF 重写期间，主进程可以继续处理命令请求。</li>
+<li>子进程带有主进程的数据副本，使用子进程而不是线程，可以在避免锁的情况下，保证数据的安全性。</li>
+</ol>
+<p>不过，
+使用子进程也有一个问题需要解决：
+因为子进程在进行 AOF 重写期间，
+主进程还需要继续处理命令，
+而新的命令可能对现有的数据进行修改，
+这会让当前数据库的数据和重写后的 AOF 文件中的数据不一致。</p>
+<p>为了解决这个问题，
+Redis 增加了一个 AOF 重写缓存，
+这个缓存在 fork 出子进程之后开始启用，
+Redis 主进程在接到新的写命令之后，
+除了会将这个写命令的协议内容追加到现有的 AOF 文件之外，
+还会追加到这个缓存中：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-982033b83f571a133367a8830ee5cca84f6a08e5.svg" alt="digraph p {
+
+    node [style = filled];
+
+    edge [style = &quot;bold, dashed&quot;];
+
+    // 
+
+    client [label = &quot;客户端&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    server [label = &quot;服务器&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    client -&gt; server [label = &quot;命令请求&quot;];
+
+    current_aof [label = &quot;现有 AOF 文件&quot;, shape = box, fillcolor = &quot;#FADCAD&quot;];
+
+    aof_rewrite_buf [label = &quot;AOF 重写缓存&quot;, shape = box, fillcolor = &quot;#FADCAD&quot;];
+
+    server -&gt; current_aof [label = &quot;命令协议内容&quot;];
+
+    server -&gt; aof_rewrite_buf [label = &quot;命令协议内容&quot;];
+}" />
+</p>
+<p>换言之，
+当子进程在执行 AOF 重写时，
+主进程需要执行以下三个工作：</p>
+<ol class="arabic simple">
+<li>处理命令请求。</li>
+<li>将写命令追加到现有的 AOF 文件中。</li>
+<li>将写命令追加到 AOF 重写缓存中。</li>
+</ol>
+<p>这样一来可以保证：</p>
+<ol class="arabic simple">
+<li>现有的 AOF 功能会继续执行，即使在 AOF 重写期间发生停机，也不会有任何数据丢失。</li>
+<li>所有对数据库进行修改的命令都会被记录到 AOF 重写缓存中。</li>
+</ol>
+<p>当子进程完成 AOF 重写之后，
+它会向父进程发送一个完成信号，
+父进程在接到完成信号之后，
+会调用一个信号处理函数，
+并完成以下工作：</p>
+<ol class="arabic simple">
+<li>将 AOF 重写缓存中的内容全部写入到新 AOF 文件中。</li>
+<li>对新的 AOF 文件进行改名，覆盖原有的 AOF 文件。</li>
+</ol>
+<p>当步骤 1 执行完毕之后，
+现有 AOF 文件、新 AOF 文件和数据库三者的状态就完全一致了。</p>
+<p>当步骤 2 执行完毕之后，
+程序就完成了新旧两个 AOF 文件的交替。</p>
+<p>这个信号处理函数执行完毕之后，
+主进程就可以继续像往常一样接受命令请求了。
+在整个 AOF 后台重写过程中，
+只有最后的写入缓存和改名操作会造成主进程阻塞，
+在其他时候，
+AOF 后台重写都不会对主进程造成阻塞，
+这将 AOF 重写对性能造成的影响降到了最低。</p>
+<p>以上就是 AOF 后台重写，
+也即是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 命令的工作原理。</p>
+</div>
+<div class="section" id="id14">
+<h2>AOF 后台重写的触发条件<a class="headerlink" href="#id14" title="Permalink to this headline">¶</a></h2>
+<p>AOF 重写可以由用户通过调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 手动触发。</p>
+<p>另外，
+服务器在 AOF 功能开启的情况下，
+会维持以下三个变量：</p>
+<ul class="simple">
+<li>记录当前 AOF 文件大小的变量 <code class="docutils literal"><span class="pre">aof_current_size</span></code> 。</li>
+<li>记录最后一次 AOF 重写之后， AOF 文件大小的变量 <code class="docutils literal"><span class="pre">aof_rewrite_base_size</span></code> 。</li>
+<li>增长百分比变量 <code class="docutils literal"><span class="pre">aof_rewrite_perc</span></code> 。</li>
+</ul>
+<p>每次当 <code class="docutils literal"><span class="pre">serverCron</span></code> 函数执行时，
+它都会检查以下条件是否全部满足，
+如果是的话，
+就会触发自动的 AOF 重写：</p>
+<ol class="arabic simple">
+<li>没有 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 命令在进行。</li>
+<li>没有 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 在进行。</li>
+<li>当前 AOF 文件大小大于 <code class="docutils literal"><span class="pre">server.aof_rewrite_min_size</span></code> （默认值为 1 MB）。</li>
+<li>当前 AOF 文件大小和最后一次 AOF 重写后的大小之间的比率大于等于指定的增长百分比。</li>
+</ol>
+<p>默认情况下，
+增长百分比为 <code class="docutils literal"><span class="pre">100%</span></code> ，
+也即是说，
+如果前面三个条件都已经满足，
+并且当前 AOF 文件大小比最后一次 AOF 重写时的大小要大一倍的话，
+那么触发自动 AOF 重写。</p>
+</div>
+<div class="section" id="id15">
+<h2>小结<a class="headerlink" href="#id15" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>AOF 文件通过保存所有修改数据库的命令来记录数据库的状态。</li>
+<li>AOF 文件中的所有命令都以 Redis 通讯协议的格式保存。</li>
+<li>不同的 AOF 保存模式对数据的安全性、以及 Redis 的性能有很大的影响。</li>
+<li>AOF 重写的目的是用更小的体积来保存数据库状态，整个重写过程基本上不影响 Redis 主进程处理命令请求。</li>
+<li>AOF 重写是一个有歧义的名字，实际的重写工作是针对数据库的当前值来进行的，程序既不读写、也不使用原有的 AOF 文件。</li>
+<li>AOF 可以由用户手动触发，也可以由服务器自动触发。</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="ae.html" title="事件"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="rdb.html" title="RDB"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

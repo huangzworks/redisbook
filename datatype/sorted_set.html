@@ -1,0 +1,299 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>有序集 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="事务" href="../feature/transaction.html" />
+    <link rel="prev" title="集合" href="set.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../feature/transaction.html" title="事务"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="set.html" title="集合"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="sorted-set-chapter">
+<span id="id1"></span><h1>有序集<a class="headerlink" href="#sorted-set-chapter" title="Permalink to this headline">¶</a></h1>
+<p><code class="docutils literal"><span class="pre">REDIS_ZSET</span></code> （有序集）是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><em>ZADD</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zcount.html#zcount" title="(in Redis 命令参考 v2.8)"><em>ZCOUNT</em></a> 等命令的操作对象，
+它使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 和 <code class="docutils literal"><span class="pre">REDIS_ENCODING_SKIPLIST</span></code> 两种方式编码：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-4d10098056ec25ed0e239f64bbcac524bce31bc8.svg" alt="digraph redis_zset {
+    
+    node [shape=plaintext, style = filled];
+
+    edge [style = bold];
+
+    // type
+
+    REDIS_ZSET [label=&quot;有序集合\nREDIS_ZSET&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    // encoding
+
+    REDIS_ENCODING_ZIPLIST [label=&quot;ziplist\nREDIS_ENCODING_ZIPLIST&quot;, fillcolor = &quot;#FADCAD&quot;];
+    REDIS_ENCODING_SKIPLIST [label=&quot;跳跃表\nREDIS_ENCODING_SKIPLIST&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    // edge
+
+    REDIS_ZSET -&gt; REDIS_ENCODING_ZIPLIST;
+    REDIS_ZSET -&gt; REDIS_ENCODING_SKIPLIST;
+
+    // datastruct 1
+
+    ziplist [label=&quot;ziplist&quot;];
+
+    REDIS_ENCODING_ZIPLIST -&gt; ziplist;
+
+    // datastruct 2
+
+    zset [label=&quot;redis.h/zset&quot;];
+
+    dict [label=&quot;dict.h/dict&quot;];
+    zskiplist [label=&quot;redis.h/zskiplist&quot;];
+
+    REDIS_ENCODING_SKIPLIST -&gt; zset;
+
+    zset -&gt; dict;
+    zset -&gt; zskiplist;
+}" />
+</p>
+<div class="section" id="id2">
+<h2>编码的选择<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>在通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><em>ZADD</em></a> 命令添加第一个元素到空 <code class="docutils literal"><span class="pre">key</span></code> 时，
+程序通过检查输入的第一个元素来决定该创建什么编码的有序集。</p>
+<p>如果第一个元素符合以下条件的话，
+就创建一个 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 编码的有序集：</p>
+<ul class="simple">
+<li>服务器属性 <code class="docutils literal"><span class="pre">server.zset_max_ziplist_entries</span></code> 的值大于 <code class="docutils literal"><span class="pre">0</span></code> （默认为 <code class="docutils literal"><span class="pre">128</span></code> ）。</li>
+<li>元素的 <code class="docutils literal"><span class="pre">member</span></code> 长度小于服务器属性 <code class="docutils literal"><span class="pre">server.zset_max_ziplist_value</span></code> 的值（默认为 <code class="docutils literal"><span class="pre">64</span></code> ）。</li>
+</ul>
+<p>否则，程序就创建一个 <code class="docutils literal"><span class="pre">REDIS_ENCODING_SKIPLIST</span></code> 编码的有序集。</p>
+</div>
+<div class="section" id="id3">
+<h2>编码的转换<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>对于一个 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 编码的有序集，
+只要满足以下任一条件，
+就将它转换为 <code class="docutils literal"><span class="pre">REDIS_ENCODING_SKIPLIST</span></code> 编码：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">ziplist</span></code> 所保存的元素数量超过服务器属性 <code class="docutils literal"><span class="pre">server.zset_max_ziplist_entries</span></code> 的值（默认值为 <code class="docutils literal"><span class="pre">128</span></code> ）</li>
+<li>新添加元素的 <code class="docutils literal"><span class="pre">member</span></code> 的长度大于服务器属性 <code class="docutils literal"><span class="pre">server.zset_max_ziplist_value</span></code> 的值（默认值为 <code class="docutils literal"><span class="pre">64</span></code> ）</li>
+</ul>
+</div>
+<div class="section" id="ziplist">
+<h2>ZIPLIST 编码的有序集<a class="headerlink" href="#ziplist" title="Permalink to this headline">¶</a></h2>
+<p>当使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 编码时，
+有序集将元素保存到 <code class="docutils literal"><span class="pre">ziplist</span></code> 数据结构里面。</p>
+<p>其中，每个有序集元素以两个相邻的 <code class="docutils literal"><span class="pre">ziplist</span></code> 节点表示，
+第一个节点保存元素的 <code class="docutils literal"><span class="pre">member</span></code> 域，
+第二个元素保存元素的 <code class="docutils literal"><span class="pre">score</span></code> 域。</p>
+<p>多个元素之间按 <code class="docutils literal"><span class="pre">score</span></code> 值从小到大排序，
+如果两个元素的 <code class="docutils literal"><span class="pre">score</span></code> 相同，
+那么按字典序对 <code class="docutils literal"><span class="pre">member</span></code> 进行对比，
+决定那个元素排在前面，
+那个元素排在后面。</p>
+<div class="highlight-c"><div class="highlight"><pre>          <span class="o">|&lt;--</span>  <span class="n">element</span> <span class="mi">1</span> <span class="o">--&gt;|&lt;--</span>  <span class="n">element</span> <span class="mi">2</span> <span class="o">--&gt;|&lt;--</span>   <span class="p">.......</span>   <span class="o">--&gt;|</span>
+
+<span class="o">+---------+---------+--------+---------+--------+---------+---------+---------+</span>
+<span class="o">|</span> <span class="n">ZIPLIST</span> <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>         <span class="o">|</span>         <span class="o">|</span> <span class="n">ZIPLIST</span> <span class="o">|</span>
+<span class="o">|</span> <span class="n">ENTRY</span>   <span class="o">|</span> <span class="n">member1</span> <span class="o">|</span> <span class="n">score1</span> <span class="o">|</span> <span class="n">member2</span> <span class="o">|</span> <span class="n">score2</span> <span class="o">|</span>   <span class="p">...</span>   <span class="o">|</span>   <span class="p">...</span>   <span class="o">|</span> <span class="n">ENTRY</span>   <span class="o">|</span>
+<span class="o">|</span> <span class="n">HEAD</span>    <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>         <span class="o">|</span>        <span class="o">|</span>         <span class="o">|</span>         <span class="o">|</span> <span class="n">END</span>     <span class="o">|</span>
+<span class="o">+---------+---------+--------+---------+--------+---------+---------+---------+</span>
+
+<span class="n">score1</span> <span class="o">&lt;=</span> <span class="n">score2</span> <span class="o">&lt;=</span> <span class="p">...</span>
+</pre></div>
+</div>
+<p>虽然元素是按 <code class="docutils literal"><span class="pre">score</span></code> 域有序排序的，
+但对 <code class="docutils literal"><span class="pre">ziplist</span></code> 的节点指针只能线性地移动，
+所以在 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 编码的有序集中，
+查找某个给定元素的复杂度为 <span class="math">\(O(N)\)</span> 。</p>
+<p>每次执行添加/删除/更新操作都需要执行一次查找元素的操作，
+因此这些函数的复杂度都不低于 <span class="math">\(O(N)\)</span> ，
+至于这些操作的实际复杂度，
+取决于它们底层所执行的 <code class="docutils literal"><span class="pre">ziplist</span></code> 操作。</p>
+</div>
+<div class="section" id="skiplist">
+<h2>SKIPLIST 编码的有序集<a class="headerlink" href="#skiplist" title="Permalink to this headline">¶</a></h2>
+<p>当使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_SKIPLIST</span></code> 编码时，
+有序集元素由 <code class="docutils literal"><span class="pre">redis.h/zset</span></code> 结构来保存：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * 有序集</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">zset</span> <span class="p">{</span>
+
+    <span class="c1">// 字典</span>
+    <span class="n">dict</span> <span class="o">*</span><span class="n">dict</span><span class="p">;</span>
+
+    <span class="c1">// 跳跃表</span>
+    <span class="n">zskiplist</span> <span class="o">*</span><span class="n">zsl</span><span class="p">;</span>
+
+<span class="p">}</span> <span class="n">zset</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">zset</span></code> 同时使用字典和跳跃表两个数据结构来保存有序集元素。</p>
+<p>其中，
+元素的成员由一个 <code class="docutils literal"><span class="pre">redisObject</span></code> 结构表示，
+而元素的 <code class="docutils literal"><span class="pre">score</span></code> 则是一个 <code class="docutils literal"><span class="pre">double</span></code> 类型的浮点数，
+字典和跳跃表两个结构通过将指针共同指向这两个值来节约空间
+（不用每个元素都复制两份）。</p>
+<p>下图展示了一个 <code class="docutils literal"><span class="pre">REDIS_ENCODING_SKIPLIST</span></code> 编码的有序集：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-66d218f87c15bc835d88c696af175d2ba39ae420.svg" alt="digraph zset {
+
+    rankdir = LR;
+
+    node [shape = record, style = filled];
+
+    edge [style = bold];
+
+    label = &quot;在实际中，字典和跳跃表通过指针来共享元素的 member 和 score\n图中对每个元素都重复显示了一遍，只是为了展示的方便&quot;;
+
+    zset [label = &quot;&lt;head&gt;zset |&lt;dict&gt;dict |&lt;zskiplist&gt; zskiplist&quot;];
+
+    // skiplist
+
+    skiplist [label =&quot;&lt;head&gt;zskipNode |&lt;3&gt; |&lt;2&gt; |&lt;1&gt; |&lt;score&gt;score\n NULL |&lt;robj&gt;robj\n NULL&quot;, fillcolor = &quot;#FADCAD&quot;];
+    six [label = &quot;&lt;head&gt;zskipNode |&lt;3&gt; |&lt;2&gt; |&lt;1&gt; |&lt;score&gt;score\n 6 |&lt;robj&gt;robj\n x&quot;, fillcolor = &quot;#FADCAD&quot;];
+    ten [label = &quot;&lt;head&gt;zskipNode | &lt;1&gt; |&lt;score&gt;score\n 10 |&lt;robj&gt;robj\n y&quot;, fillcolor = &quot;#FADCAD&quot;];
+    fiften [label = &quot;&lt;head&gt;zskipNode |&lt;3&gt; |&lt;2&gt; |&lt;1&gt; |&lt;score&gt;score\n 15 |&lt;robj&gt;robj\n z&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    zset:dict -&gt; dict:head;
+    zset:zskiplist -&gt; skiplist:head;
+    skiplist:3 -&gt; six:3; 
+    skiplist:2 -&gt; six:2;
+    skiplist:1 -&gt; six:1;
+    six:1 -&gt; ten:1;
+    six:2 -&gt; fiften:2;
+    six:3 -&gt; fiften:3;
+    ten:1 -&gt; fiften:1;
+
+
+    // dict
+
+    dict [label = &quot;&lt;head&gt;dictht | ... |&lt;table&gt; table | ...&quot;, fillcolor = &quot;#A8E270&quot;];
+    bucket [label = &quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;0&gt; 0 |&lt;1&gt; 1 |&lt;2&gt; 2&quot;, fillcolor = &quot;#95BBE3&quot;];
+    entry_x [label = &quot;&lt;head&gt;dictEntry |{&lt;key&gt;key\n x |&lt;value&gt;value\n 6}&quot;, fillcolor = &quot;#F2F2F2&quot;];
+    entry_y [label = &quot;&lt;head&gt;dictEntry |{&lt;key&gt;key\n y |&lt;value&gt;value\n 10}&quot;, fillcolor = &quot;#F2F2F2&quot;];
+    entry_z [label = &quot;&lt;head&gt;dictEntry |{&lt;key&gt;key\n z |&lt;value&gt;value\n 15}&quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    dict:table -&gt; bucket:head;
+
+    bucket:0 -&gt; entry_x:head;
+    bucket:1 -&gt; entry_y:head;
+    bucket:2 -&gt; entry_z:head;
+
+}" />
+</p>
+<p>通过使用字典结构，
+并将 <code class="docutils literal"><span class="pre">member</span></code> 作为键，
+<code class="docutils literal"><span class="pre">score</span></code> 作为值，
+有序集可以在 <span class="math">\(O(1)\)</span> 复杂度内：</p>
+<ul class="simple">
+<li>检查给定 <code class="docutils literal"><span class="pre">member</span></code> 是否存在于有序集（被很多底层函数使用）；</li>
+<li>取出 <code class="docutils literal"><span class="pre">member</span></code> 对应的 <code class="docutils literal"><span class="pre">score</span></code> 值（实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zscore.html#zscore" title="(in Redis 命令参考 v2.8)"><em>ZSCORE</em></a> 命令）。</li>
+</ul>
+<p>另一方面，
+通过使用跳跃表，
+可以让有序集支持以下两种操作：</p>
+<ul class="simple">
+<li>在 <span class="math">\(O(\log N)\)</span> 期望时间、 <span class="math">\(O(N)\)</span> 最坏时间内根据 <code class="docutils literal"><span class="pre">score</span></code> 对 <code class="docutils literal"><span class="pre">member</span></code> 进行定位（被很多底层函数使用）；</li>
+<li>范围性查找和处理操作，这是（高效地）实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrange.html#zrange" title="(in Redis 命令参考 v2.8)"><em>ZRANGE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrank.html#zrank" title="(in Redis 命令参考 v2.8)"><em>ZRANK</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zinterstore.html#zinterstore" title="(in Redis 命令参考 v2.8)"><em>ZINTERSTORE</em></a> 等命令的关键。</li>
+</ul>
+<p>通过同时使用字典和跳跃表，
+有序集可以高效地实现按成员查找和按顺序查找两种操作。</p>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../feature/transaction.html" title="事务"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="set.html" title="集合"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

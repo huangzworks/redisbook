@@ -1,9 +1,0 @@
-.. code-block:: python
-
-    def PUBLISH(channel, message):
-
-        # 遍历所有订阅频道 channel 的客户端
-        for client in server.pubsub_channels[channel]:
-
-            # 将信息发送给它们
-            send_message(client, message)                   

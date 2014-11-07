@@ -1,0 +1,528 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>整数集合 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="压缩列表" href="ziplist.html" />
+    <link rel="prev" title="跳跃表" href="../internal-datastruct/skiplist.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="ziplist.html" title="压缩列表"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="../internal-datastruct/skiplist.html" title="跳跃表"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>整数集合<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>整数集合（intset）用于有序、无重复地保存多个整数值，
+根据元素的值，
+自动选择该用什么长度的整数类型来保存元素。</p>
+<p>举个例子，
+如果在一个 intset 里面，
+最长的元素可以用 <code class="docutils literal"><span class="pre">int16_t</span></code> 类型来保存，
+那么这个 intset 的所有元素都以 <code class="docutils literal"><span class="pre">int16_t</span></code> 类型来保存。</p>
+<p>另一方面，
+如果有一个新元素要加入到这个 intset ，
+并且这个元素不能用 <code class="docutils literal"><span class="pre">int16_t</span></code> 类型来保存 ——
+比如说，
+新元素的长度为 <code class="docutils literal"><span class="pre">int32_t</span></code> ，
+那么这个 intset 就会自动进行“升级”：
+先将集合中现有的所有元素从 <code class="docutils literal"><span class="pre">int16_t</span></code> 类型转换为 <code class="docutils literal"><span class="pre">int32_t</span></code> 类型，
+接着再将新元素加入到集合中。</p>
+<p>根据需要，
+intset 可以自动从 <code class="docutils literal"><span class="pre">int16_t</span></code> 升级到 <code class="docutils literal"><span class="pre">int32_t</span></code> 或 <code class="docutils literal"><span class="pre">int64_t</span></code> ，
+或者从 <code class="docutils literal"><span class="pre">int32_t</span></code> 升级到 <code class="docutils literal"><span class="pre">int64_t</span></code> 。</p>
+<div class="section" id="id2">
+<h2>整数集合的应用<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>Intset 是集合键的底层实现之一，如果一个集合：</p>
+<ol class="arabic simple">
+<li>只保存着整数元素；</li>
+<li>元素的数量不多；</li>
+</ol>
+<p>那么 Redis 就会使用 intset 来保存集合元素。</p>
+<p>具体的信息请参考《<a class="reference internal" href="../datatype/set.html#set-chapter"><em>集合</em></a>》。</p>
+</div>
+<div class="section" id="id3">
+<h2>数据结构和主要操作<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>以下是 <code class="docutils literal"><span class="pre">intset.h/intset</span></code> 类型的定义：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">intset</span> <span class="p">{</span>
+
+    <span class="c1">// 保存元素所使用的类型的长度</span>
+    <span class="kt">uint32_t</span> <span class="n">encoding</span><span class="p">;</span>
+
+    <span class="c1">// 元素个数</span>
+    <span class="kt">uint32_t</span> <span class="n">length</span><span class="p">;</span>
+
+    <span class="c1">// 保存元素的数组</span>
+    <span class="kt">int8_t</span> <span class="n">contents</span><span class="p">[];</span>
+
+<span class="p">}</span> <span class="n">intset</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">encoding</span></code> 的值可以是以下三个常量之一（定义位于 <code class="docutils literal"><span class="pre">intset.c</span></code> ）：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#define INTSET_ENC_INT16 (sizeof(int16_t))</span>
+<span class="cp">#define INTSET_ENC_INT32 (sizeof(int32_t))</span>
+<span class="cp">#define INTSET_ENC_INT64 (sizeof(int64_t))</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">contents</span></code> 数组是实际保存元素的地方，数组中的元素有以下两个特性：</p>
+<ul class="simple">
+<li>元素不重复；</li>
+<li>元素在数组中由小到大排列；</li>
+</ul>
+<p><code class="docutils literal"><span class="pre">contents</span></code> 数组的 <code class="docutils literal"><span class="pre">int8_t</span></code> 类型声明比较容易让人误解，实际上， <code class="docutils literal"><span class="pre">intset</span></code> 并不使用 <code class="docutils literal"><span class="pre">int8_t</span></code> 类型来保存任何元素，结构中的这个类型声明只是作为一个占位符使用：在对 <code class="docutils literal"><span class="pre">contents</span></code> 中的元素进行读取或者写入时，程序并不是直接使用 <code class="docutils literal"><span class="pre">contents</span></code> 来对元素进行索引，而是根据 <code class="docutils literal"><span class="pre">encoding</span></code> 的值，对 <code class="docutils literal"><span class="pre">contents</span></code> 进行类型转换和指针运算，计算出元素在内存中的正确位置。在添加新元素，进行内存分配时，分配的空间也是由 <code class="docutils literal"><span class="pre">encoding</span></code> 的值决定。</p>
+<p>下表列出了处理 <code class="docutils literal"><span class="pre">intset</span></code> 的一些主要操作，以及这些操作的算法复杂度：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="30%" />
+<col width="37%" />
+<col width="33%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">操作</th>
+<th class="head">函数</th>
+<th class="head">复杂度</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>创建 intset</td>
+<td><code class="docutils literal"><span class="pre">intsetNew</span></code></td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td>删除 intset</td>
+<td>无</td>
+<td>无</td>
+</tr>
+<tr class="row-even"><td>添加新元素（不升级）</td>
+<td><code class="docutils literal"><span class="pre">intsetAdd</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td>添加新元素（升级）</td>
+<td><code class="docutils literal"><span class="pre">intsetUpgradeAndAdd</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td>按索引获取元素</td>
+<td><code class="docutils literal"><span class="pre">_intsetGet</span></code></td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td>按索引设置元素</td>
+<td><code class="docutils literal"><span class="pre">_intsetSet</span></code></td>
+<td><span class="math">\(\theta(1)\)</span></td>
+</tr>
+<tr class="row-even"><td>查找元素，返回索引</td>
+<td><code class="docutils literal"><span class="pre">intsetSearch</span></code></td>
+<td><span class="math">\(O(\lg N)\)</span></td>
+</tr>
+<tr class="row-odd"><td>删除元素</td>
+<td><code class="docutils literal"><span class="pre">intsetRemove</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="intset">
+<h2>intset 运行实例<a class="headerlink" href="#intset" title="Permalink to this headline">¶</a></h2>
+<p>让我们跟踪一个 <code class="docutils literal"><span class="pre">intset</span></code> 的创建和添加过程，借此了解 <code class="docutils literal"><span class="pre">intset</span></code> 的运作方式。</p>
+<div class="section" id="id4">
+<h3>创建新 intset<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h3>
+<p><code class="docutils literal"><span class="pre">intset.c/intsetNew</span></code> 函数创建一个新的 <code class="docutils literal"><span class="pre">intset</span></code> ，并设置初始化值：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">intset</span> <span class="o">*</span><span class="n">is</span> <span class="o">=</span> <span class="n">intsetNew</span><span class="p">();</span>
+
+<span class="c1">// intset-&gt;encoding = INTSET_ENC_INT16;</span>
+<span class="c1">// intset-&gt;length 0;</span>
+<span class="c1">// intset-&gt;contents = [];</span>
+</pre></div>
+</div>
+<p>注意 <code class="docutils literal"><span class="pre">encoding</span></code> 使用 <code class="docutils literal"><span class="pre">INTSET_ENC_INT16</span></code> 作为初始值。</p>
+</div>
+<div class="section" id="id5">
+<h3>添加新元素到 intset<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h3>
+<p>创建 <code class="docutils literal"><span class="pre">intset</span></code> 之后，就可以对它添加新元素了。</p>
+<p>添加新元素到 <code class="docutils literal"><span class="pre">intset</span></code> 的工作由 <code class="docutils literal"><span class="pre">intset.c/intsetAdd</span></code> 函数完成，需要处理以下三种情况：</p>
+<ol class="arabic simple">
+<li>元素已存在于集合，不做动作；</li>
+<li>元素不存在于集合，并且添加新元素并不需要升级；</li>
+<li>元素不存在于集合，但是要在升级之后，才能添加新元素；</li>
+</ol>
+<p>并且， <code class="docutils literal"><span class="pre">intsetAdd</span></code> 需要维持 <code class="docutils literal"><span class="pre">intset-&gt;contents</span></code> 的以下性质：</p>
+<ol class="arabic simple">
+<li>确保数组中没有重复元素；</li>
+<li>确保数组中的元素按由小到大排序；</li>
+</ol>
+<p>整个 <code class="docutils literal"><span class="pre">intsetAdd</span></code> 的执行流程可以表示为下图：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-1565e65522fdcd4245030f17b5074729033297d8.svg" alt="digraph intsetAdd {
+
+    node [shape=plaintext, style = filled];
+
+    edge [style = bold];
+
+    start [label=&quot;intsetAdd&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    check_encoding [label=&quot;集合当前的编码类型\n是否适用于新元素？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    start -&gt; check_encoding;
+
+    upgrade [label=&quot;调用\n intsetUpgradeAndAdd\n升级集合\n并将新元素\n添加到升级后的集合中&quot;];
+
+    check_encoding -&gt; upgrade [label=&quot;不适用&quot;];
+
+    value_exists [label=&quot;元素已经存在于集合？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    check_encoding -&gt; value_exists [label=&quot;适用&quot;];
+
+
+    insert_fail [label=&quot;添加失败，元素已存在&quot;];
+
+    realloc_and_move [label=&quot;为新元素分配内存\n并对 contents 数组中现有的元素进行移动，\n确保新元素会被放到有序数组正确的位置上&quot;];
+    
+    value_exists -&gt; insert_fail [label=&quot;是&quot;];
+
+    value_exists -&gt; realloc_and_move [label=&quot;否&quot;];
+
+
+    done [label=&quot;将新元素的值保存到 contents 数组中\n更新 length 计数器&quot;];
+
+    realloc_and_move -&gt; done;
+}" />
+</p>
+<p>以下两个小节分别演示添加操作在升级和不升级两种情况下的执行过程。</p>
+</div>
+<div class="section" id="id6">
+<h3>添加新元素到 intset （不需要升级）<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h3>
+<p>如果 intset 现有的编码方式适用于新元素，
+则可直接将新元素添加到 intset ，
+无须对 intset 进行升级。</p>
+<p>以下代码演示了将三个 <code class="docutils literal"><span class="pre">int16_t</span></code> 类型的整数添加到集合的过程，
+以及在添加过程中，集合的状态：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">intset</span> <span class="o">*</span><span class="n">is</span> <span class="o">=</span> <span class="n">intsetNew</span><span class="p">();</span>
+
+<span class="n">intsetAdd</span><span class="p">(</span><span class="n">is</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+<span class="c1">// is-&gt;encoding = INTSET_ENC_INT16;</span>
+<span class="c1">// is-&gt;length = 1;</span>
+<span class="c1">// is-&gt;contents = [10];</span>
+
+<span class="n">intsetAdd</span><span class="p">(</span><span class="n">is</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+<span class="c1">// is-&gt;encoding = INTSET_ENC_INT16;</span>
+<span class="c1">// is-&gt;length = 2;</span>
+<span class="c1">// is-&gt;contents = [5, 10];</span>
+
+<span class="n">intsetAdd</span><span class="p">(</span><span class="n">is</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+<span class="c1">// is-&gt;encoding = INTSET_ENC_INT16;</span>
+<span class="c1">// is-&gt;length = 3;</span>
+<span class="c1">// is-&gt;contents = [5, 10, 12]</span>
+</pre></div>
+</div>
+<p>因为添加的三个元素都可以表示为 <code class="docutils literal"><span class="pre">int16_t</span></code> ，
+因此 <code class="docutils literal"><span class="pre">is-&gt;encoding</span></code> 一直都是 <code class="docutils literal"><span class="pre">INTSET_ENC_INT16</span></code> 。</p>
+<p>另一方面， <code class="docutils literal"><span class="pre">is-&gt;length</span></code> 和 <code class="docutils literal"><span class="pre">is-&gt;contents</span></code> 的值，则随着新元素的加入而被修改。</p>
+</div>
+<div class="section" id="id7">
+<h3>添加新元素到 intset （需要升级）<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h3>
+<p>当要添加新元素到 intset ，并且 intset 当前的编码，不适用于新元素的编码时，就需要对 intset 进行升级。</p>
+<p>以下代码演示了带升级的添加操作的执行过程：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">intset</span> <span class="o">*</span><span class="n">is</span> <span class="o">=</span> <span class="n">intsetNew</span><span class="p">();</span>
+
+<span class="n">intsetAdd</span><span class="p">(</span><span class="n">is</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+<span class="c1">// is-&gt;encoding = INTSET_ENC_INT16;</span>
+<span class="c1">// is-&gt;length = 1;</span>
+<span class="c1">// is-&gt;contents = [1];                  // 所有值使用 int16_t 保存</span>
+
+<span class="n">intsetAdd</span><span class="p">(</span><span class="n">is</span><span class="p">,</span> <span class="mi">65535</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+<span class="c1">// is-&gt;encoding = INTSET_ENC_INT32;     // 升级</span>
+<span class="c1">// is-&gt;length = 2;</span>
+<span class="c1">// is-&gt;contents = [1, 65535];           // 所有值使用 int32_t 保存</span>
+
+<span class="n">intsetAdd</span><span class="p">(</span><span class="n">is</span><span class="p">,</span> <span class="mi">70000</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+<span class="c1">// is-&gt;encoding = INTSET_ENC_INT32;</span>
+<span class="c1">// is-&gt;length = 3;</span>
+<span class="c1">// is-&gt;contents = [1, 65535, 70000];</span>
+
+<span class="n">intsetAdd</span><span class="p">(</span><span class="n">is</span><span class="p">,</span> <span class="mi">4294967295</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+
+<span class="c1">// is-&gt;encoding = INTSET_ENC_INT64;                 // 升级</span>
+<span class="c1">// is-&gt;length = 4;</span>
+<span class="c1">// is-&gt;contents = [1, 65535, 70000, 4294967295];    // 所有值使用 int64_t 保存</span>
+</pre></div>
+</div>
+<p>在添加 <code class="docutils literal"><span class="pre">65535</span></code> 和 <code class="docutils literal"><span class="pre">4294967295</span></code> 之后，
+<code class="docutils literal"><span class="pre">encoding</span></code> 属性的值，以及 <code class="docutils literal"><span class="pre">contents</span></code> 数组保存值的方式，都被改变了。</p>
+</div>
+</div>
+<div class="section" id="id8">
+<h2>升级<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<p>添加新元素时，如果 <code class="docutils literal"><span class="pre">intsetAdd</span></code> 发现新元素，不能用现有的编码方式来保存，便会将升级集合和添加新元素的任务转交给 <code class="docutils literal"><span class="pre">intsetUpgradeAndAdd</span></code> 来完成：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-1058591c9a0d517a84afc9e1e5e90aa88e27fc1a.svg" alt="digraph g {
+
+    edge [style = bold];
+    node [shape = plaintext, style = filled];
+
+    add [label = &quot;添加新元素到 intset&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    upgrade_or_not [label = &quot;intset 需要升级？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    add -&gt; upgrade_or_not;
+
+    upgrade_or_not -&gt; intsetAdd [label = &quot;不需要&quot;];
+
+    upgrade_or_not -&gt; intsetUpgradeAndAdd [label = &quot;需要&quot;];
+
+}" />
+</p>
+<p><code class="docutils literal"><span class="pre">intsetUpgradeAndAdd</span></code> 需要完成以下几个任务：</p>
+<ol class="arabic simple">
+<li>对新元素进行检测，看保存这个新元素需要什么类型的编码；</li>
+<li>将集合 <code class="docutils literal"><span class="pre">encoding</span></code> 属性的值设置为新编码类型，并根据新编码类型，对整个 <code class="docutils literal"><span class="pre">contents</span></code> 数组进行内存重分配。</li>
+<li>调整 <code class="docutils literal"><span class="pre">contents</span></code> 数组内原有元素在内存中的排列方式，从旧编码调整为新编码。</li>
+<li>将新元素添加到集合中。</li>
+</ol>
+<p>整个过程中，最复杂的就是第三步，让我们用一个例子来理解这个步骤。</p>
+<div class="section" id="id9">
+<h3>升级实例<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h3>
+<p>假设有一个 <code class="docutils literal"><span class="pre">intset</span></code> ，里面有三个用 <code class="docutils literal"><span class="pre">int16_t</span></code> 方式保存的数值，分别是 <code class="docutils literal"><span class="pre">1</span></code> 、 <code class="docutils literal"><span class="pre">2</span></code> 和 <code class="docutils literal"><span class="pre">3</span></code> ，结构如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">intset</span><span class="o">-&gt;</span><span class="n">encoding</span> <span class="o">=</span> <span class="n">INTSET_ENC_INT16</span><span class="p">;</span>
+<span class="n">intset</span><span class="o">-&gt;</span><span class="n">length</span> <span class="o">=</span> <span class="mi">3</span><span class="p">;</span>
+<span class="n">intset</span><span class="o">-&gt;</span><span class="n">contents</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">];</span>
+</pre></div>
+</div>
+<p>其中， <code class="docutils literal"><span class="pre">intset-&gt;contents</span></code> 在内存中的排列如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">bit</span>     <span class="mi">0</span>    <span class="mi">15</span>    <span class="mi">31</span>    <span class="mi">47</span>
+<span class="n">value</span>   <span class="o">|</span>  <span class="mi">1</span>  <span class="o">|</span>  <span class="mi">2</span>  <span class="o">|</span>  <span class="mi">3</span>  <span class="o">|</span>
+</pre></div>
+</div>
+<p>现在，我们将一个长度为 <code class="docutils literal"><span class="pre">int32_t</span></code> 的值 <code class="docutils literal"><span class="pre">65535</span></code> 加入到集合中， <code class="docutils literal"><span class="pre">intset</span></code> 需要执行以下步骤：</p>
+<ol class="arabic">
+<li><p class="first">将 <code class="docutils literal"><span class="pre">encoding</span></code> 属性设置为 <code class="docutils literal"><span class="pre">INTSET_ENC_INT32</span></code> 。</p>
+</li>
+<li><p class="first">根据 <code class="docutils literal"><span class="pre">encoding</span></code> 属性的值，对 <code class="docutils literal"><span class="pre">contents</span></code> 数组进行内存重分配。</p>
+<p>重分配完成之后， <code class="docutils literal"><span class="pre">contents</span></code> 在内存中的排列如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">bit</span>     <span class="mi">0</span>    <span class="mi">15</span>    <span class="mi">31</span>    <span class="mi">47</span>     <span class="mi">63</span>        <span class="mi">95</span>       <span class="mi">127</span>
+<span class="n">value</span>   <span class="o">|</span>  <span class="mi">1</span>  <span class="o">|</span>  <span class="mi">2</span>  <span class="o">|</span>  <span class="mi">3</span>  <span class="o">|</span>  <span class="o">?</span>  <span class="o">|</span>    <span class="o">?</span>    <span class="o">|</span>    <span class="o">?</span>    <span class="o">|</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">contents</span></code> 数组现在共有可容纳 4 个 <code class="docutils literal"><span class="pre">int32_t</span></code> 值的空间。</p>
+</li>
+<li><p class="first">因为原来的 3 个 <code class="docutils literal"><span class="pre">int16_t</span></code> 值还“挤在” <code class="docutils literal"><span class="pre">contents</span></code> 前面的 48 个位里， 所以程序需要移动它们并转换类型， 让它们适应集合的新编码方式。</p>
+<p>首先是移动 <code class="docutils literal"><span class="pre">3</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">bit</span>     <span class="mi">0</span>    <span class="mi">15</span>    <span class="mi">31</span>    <span class="mi">47</span>     <span class="mi">63</span>        <span class="mi">95</span>       <span class="mi">127</span>
+<span class="n">value</span>   <span class="o">|</span>  <span class="mi">1</span>  <span class="o">|</span>  <span class="mi">2</span>  <span class="o">|</span>  <span class="mi">3</span>  <span class="o">|</span>  <span class="o">?</span>  <span class="o">|</span>    <span class="mi">3</span>    <span class="o">|</span>    <span class="o">?</span>    <span class="o">|</span>
+                       <span class="o">|</span>             <span class="o">^</span>
+                       <span class="o">|</span>             <span class="o">|</span>
+                       <span class="o">+-------------+</span>
+                     <span class="kt">int16_t</span> <span class="o">-&gt;</span> <span class="kt">int32_t</span>
+</pre></div>
+</div>
+<p>接着移动 <code class="docutils literal"><span class="pre">2</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">bit</span>     <span class="mi">0</span>    <span class="mi">15</span>    <span class="mi">31</span>   <span class="mi">47</span>     <span class="mi">63</span>        <span class="mi">95</span>       <span class="mi">127</span>
+<span class="n">value</span>   <span class="o">|</span>  <span class="mi">1</span>  <span class="o">|</span>  <span class="mi">2</span>  <span class="o">|</span>    <span class="mi">2</span>     <span class="o">|</span>    <span class="mi">3</span>    <span class="o">|</span>    <span class="o">?</span>    <span class="o">|</span>
+                 <span class="o">|</span>       <span class="o">^</span>
+                 <span class="o">|</span>       <span class="o">|</span>
+                 <span class="o">+-------+</span>
+            <span class="kt">int16_t</span> <span class="o">-&gt;</span> <span class="kt">int32_t</span>
+</pre></div>
+</div>
+<p>最后，移动 <code class="docutils literal"><span class="pre">1</span></code> ：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">bit</span>     <span class="mi">0</span>   <span class="mi">15</span>    <span class="mi">31</span>   <span class="mi">47</span>     <span class="mi">63</span>        <span class="mi">95</span>       <span class="mi">127</span>
+<span class="n">value</span>   <span class="o">|</span>    <span class="mi">1</span>     <span class="o">|</span>    <span class="mi">2</span>     <span class="o">|</span>    <span class="mi">3</span>    <span class="o">|</span>    <span class="o">?</span>    <span class="o">|</span>
+            <span class="o">|</span> <span class="o">^</span>
+            <span class="n">V</span> <span class="o">|</span>
+    <span class="kt">int16_t</span> <span class="o">-&gt;</span> <span class="kt">int32_t</span>
+</pre></div>
+</div>
+</li>
+<li><p class="first">最后，将新值 65535 添加到数组：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">bit</span>     <span class="mi">0</span>   <span class="mi">15</span>    <span class="mi">31</span>   <span class="mi">47</span>     <span class="mi">63</span>        <span class="mi">95</span>       <span class="mi">127</span>
+<span class="n">value</span>   <span class="o">|</span>    <span class="mi">1</span>     <span class="o">|</span>    <span class="mi">2</span>     <span class="o">|</span>    <span class="mi">3</span>    <span class="o">|</span>  <span class="mi">65535</span>  <span class="o">|</span>
+                                             <span class="o">^</span>
+                                             <span class="o">|</span>
+                                            <span class="n">add</span>
+</pre></div>
+</div>
+<p>将 <code class="docutils literal"><span class="pre">intset-&gt;length</span></code> 设置为 <code class="docutils literal"><span class="pre">4</span></code> 。</p>
+</li>
+</ol>
+<p>至此，集合的升级和添加操作完成，现在的 <code class="docutils literal"><span class="pre">intset</span></code> 结构如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">intset</span><span class="o">-&gt;</span><span class="n">encoding</span> <span class="o">=</span> <span class="n">INTSET_ENC_INT32</span><span class="p">;</span>
+<span class="n">intset</span><span class="o">-&gt;</span><span class="n">length</span> <span class="o">=</span> <span class="mi">4</span><span class="p">;</span>
+<span class="n">intset</span><span class="o">-&gt;</span><span class="n">contents</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">65535</span><span class="p">];</span>
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="id10">
+<h2>关于升级<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h2>
+<p>关于升级操作，有两点需要提醒一下：</p>
+<div class="section" id="id11">
+<h3>第一，从较短整数到较长整数的转换，并不会更改元素里面的值。<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h3>
+<p>在 C 语言中，从长度较短的带符号整数到长度较长的带符号整数之间的转换（比如从 <code class="docutils literal"><span class="pre">int16_t</span></code> 转换为 <code class="docutils literal"><span class="pre">int32_t</span></code> ）总是可行的（不会溢出）、无损的。</p>
+<p>另一方面，从较长整数到较短整数之间的转换，可能是有损的（比如从 <code class="docutils literal"><span class="pre">int32_t</span></code> 转换为 <code class="docutils literal"><span class="pre">int16_t</span></code> ）。</p>
+<p>因为 intset 只进行从较短整数到较长整数的转换（也即是，只“升级”，不“降级”），因此，“升级”操作并不会修改元素原有的值。</p>
+</div>
+<div class="section" id="id12">
+<h3>第二，集合编码元素的方式，由元素中长度最大的那个值来决定。<a class="headerlink" href="#id12" title="Permalink to this headline">¶</a></h3>
+<p>就像前面演示的例子一样，
+当要将一个 <code class="docutils literal"><span class="pre">int32_t</span></code> 编码的新元素添加到集合时，
+集合原有的所有 <code class="docutils literal"><span class="pre">int16_t</span></code> 编码的元素，
+都必须转换为 <code class="docutils literal"><span class="pre">int32_t</span></code> 。</p>
+<p>尽管这个集合真正需要用 <code class="docutils literal"><span class="pre">int32_t</span></code> 长度来保存的元素只有一个，
+但整个集合的所有元素都必须转换为这种类型。</p>
+</div>
+</div>
+<div class="section" id="id13">
+<h2>关于元素移动<a class="headerlink" href="#id13" title="Permalink to this headline">¶</a></h2>
+<p>在进行升级的过程中，需要对数组内的元素进行“类型转换”和“移动”操作。</p>
+<p>其中，
+移动不仅出现在升级（<code class="docutils literal"><span class="pre">intsetUpgradeAndAdd</span></code>）操作中，
+还出现其他对 <code class="docutils literal"><span class="pre">contents</span></code> 数组内容进行增删的操作上，
+比如 <code class="docutils literal"><span class="pre">intsetAdd</span></code> 和 <code class="docutils literal"><span class="pre">intsetRemove</span></code> ，
+因为这种移动操作需要处理 intset 中的所有元素，
+所以这些函数的复杂度都不低于 <span class="math">\(O(N)\)</span> 。</p>
+</div>
+<div class="section" id="id14">
+<h2>其他操作<a class="headerlink" href="#id14" title="Permalink to this headline">¶</a></h2>
+<p>以下是一些关于 intset 其他操作的讨论。</p>
+<div class="section" id="id15">
+<h3>读取<a class="headerlink" href="#id15" title="Permalink to this headline">¶</a></h3>
+<p>有两种方式读取 <code class="docutils literal"><span class="pre">intset</span></code> 的元素，一种是 <code class="docutils literal"><span class="pre">_intsetGet</span></code> ，另一种是 <code class="docutils literal"><span class="pre">intsetSearch</span></code> ：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">_intsetGet</span></code> 接受一个给定的索引 <code class="docutils literal"><span class="pre">pos</span></code> ，并根据 <code class="docutils literal"><span class="pre">intset-&gt;encoding</span></code> 的值进行指针运算，计算出给定索引在 <code class="docutils literal"><span class="pre">intset-&gt;contents</span></code> 数组上的值。</li>
+<li><code class="docutils literal"><span class="pre">intsetSearch</span></code> 则使用<a class="reference external" href="http://en.wikipedia.org/wiki/Binary_search_algorithm">二分查找</a>算法，判断一个给定元素在 <code class="docutils literal"><span class="pre">contents</span></code> 数组上的索引。</li>
+</ul>
+</div>
+<div class="section" id="id17">
+<h3>写入<a class="headerlink" href="#id17" title="Permalink to this headline">¶</a></h3>
+<p>除了前面介绍过的 <code class="docutils literal"><span class="pre">intsetAdd</span></code> 和 <code class="docutils literal"><span class="pre">intsetUpgradeAndAdd</span></code> 之外， <code class="docutils literal"><span class="pre">_intsetSet</span></code> 也对集合进行写入操作：
+它接受一个索引 <code class="docutils literal"><span class="pre">pos</span></code> ，以及一个 <code class="docutils literal"><span class="pre">new_value</span></code> ，将 <code class="docutils literal"><span class="pre">contents</span></code> 数组 <code class="docutils literal"><span class="pre">pos</span></code> 位置的值设为 <code class="docutils literal"><span class="pre">new_value</span></code> 。</p>
+</div>
+<div class="section" id="id18">
+<h3>删除<a class="headerlink" href="#id18" title="Permalink to this headline">¶</a></h3>
+<p>删除单个元素的工作由 <code class="docutils literal"><span class="pre">intsetRemove</span></code> 操作，
+它先调用 <code class="docutils literal"><span class="pre">intsetSearch</span></code> 找到需要被删除的元素在 <code class="docutils literal"><span class="pre">contents</span></code> 数组中的索引，
+然后使用内存移位操作，将目标元素从内存中抹去，
+最后，通过内存重分配，对 <code class="docutils literal"><span class="pre">contents</span></code> 数组的长度进行调整。</p>
+</div>
+<div class="section" id="id19">
+<h3>降级<a class="headerlink" href="#id19" title="Permalink to this headline">¶</a></h3>
+<p>Intset 不支持降级操作。</p>
+<p>Intset 定位为一种受限的中间表示，
+只能保存整数值，
+而且元素的个数也不能超过 <code class="docutils literal"><span class="pre">redis.h/REDIS_SET_MAX_INTSET_ENTRIES</span></code> （目前版本值为 <code class="docutils literal"><span class="pre">512</span></code> ）
+这些条件决定了它被保存的时间不会太长，
+因此没有必要进行太复杂的操作，</p>
+<p>当然，如果内存确实十分紧张的话，给 intset 添加降级功能也是可以实现的，不过这可能会让 <code class="docutils literal"><span class="pre">intset</span></code> 的代码增长一倍。</p>
+</div>
+</div>
+<div class="section" id="id20">
+<h2>小结<a class="headerlink" href="#id20" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>Intset 用于有序、无重复地保存多个整数值，会根据元素的值，自动选择该用什么长度的整数类型来保存元素。</li>
+<li>当一个位长度更长的整数值添加到 intset 时，需要对 intset 进行升级，新 intset 中每个元素的位长度，会等于新添加值的位长度，但原有元素的值不变。</li>
+<li>升级会引起整个 intset 进行内存重分配，并移动集合中的所有元素，这个操作的复杂度为 <span class="math">\(O(N)\)</span> 。</li>
+<li>Intset 只支持升级，不支持降级。</li>
+<li>Intset 是有序的，程序使用二分查找算法来实现查找操作，复杂度为 <span class="math">\(O(\lg N)\)</span> 。</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="ziplist.html" title="压缩列表"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="../internal-datastruct/skiplist.html" title="跳跃表"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

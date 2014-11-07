@@ -1,0 +1,186 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>关于 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="index.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li><a href="index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>关于<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>这是《Redis 设计与实现》第一版的原稿，
+在线阅读请访问 <a class="reference external" href="http://origin.redisbook.com/">http://origin.redisbook.com/</a> 。</p>
+</div>
+<div class="section" id="id2">
+<h1>声明<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h1>
+<p>本书由 <a class="reference external" href="http://huangz.me">huangz</a> 撰写，保留所有权利。</p>
+</div>
+<div class="section" id="id3">
+<h1>贡献者<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h1>
+<p>以下朋友通过回报 bug 、提供意见等方式为本书做出了贡献，特此感谢：</p>
+<ul>
+<li><p class="first"><a class="reference external" href="https://github.com/milkliker">Zhao Jun</a></p>
+<blockquote>
+<div><ul class="simple">
+<li><a class="reference external" href="https://github.com/huangz1990/redisbook/commit/994e03b8a9ab998ad0c9453d7a02bcd1bdb0f220">https://github.com/huangz1990/redisbook/commit/994e03b8a9ab998ad0c9453d7a02bcd1bdb0f220</a></li>
+<li><a class="reference external" href="https://github.com/huangz1990/redisbook/commit/deb9b1ffc9928a8fdc55f5928b1e9da711302604">https://github.com/huangz1990/redisbook/commit/deb9b1ffc9928a8fdc55f5928b1e9da711302604</a></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p class="first">coderbee：</p>
+<blockquote>
+<div><ul class="simple">
+<li><a class="reference external" href="https://github.com/huangz1990/redisbook/commit/20ee93fdc483a0ffe76154495b6e56f57ffde74e">https://github.com/huangz1990/redisbook/commit/20ee93fdc483a0ffe76154495b6e56f57ffde74e</a></li>
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/internal/rdb.html#comment-829903931">http://www.redisbook.com/en/latest/internal/rdb.html#comment-829903931</a></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p class="first">shenchenhs：</p>
+<blockquote>
+<div><ul class="simple">
+<li><a class="reference external" href="https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829050701">https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829050701</a></li>
+<li><a class="reference external" href="https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829079413">https://redisbook.readthedocs.org/en/latest/internal/redis.html#comment-829079413</a></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p class="first">王超： <a class="reference external" href="http://www.redisbook.com/en/latest/feature/transaction.html#comment-830849132">http://www.redisbook.com/en/latest/feature/transaction.html#comment-830849132</a></p>
+</li>
+<li><p class="first">disqus_YBOaGxxUSD： <a class="reference external" href="http://www.redisbook.com/en/latest/feature/pubsub.html#comment-833341938">http://www.redisbook.com/en/latest/feature/pubsub.html#comment-833341938</a></p>
+</li>
+<li><p class="first"><a class="reference external" href="https://github.com/hongliuliao">hongliuliao</a> ：<a class="reference external" href="https://github.com/huangz1990/annotated_redis_source/issues/3">https://github.com/huangz1990/annotated_redis_source/issues/3</a></p>
+</li>
+<li><p class="first">Hardy Simpson：</p>
+<blockquote>
+<div><ul class="simple">
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/feature/transaction.html#comment-831264796">http://www.redisbook.com/en/latest/feature/transaction.html#comment-831264796</a></li>
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/internal-datastruct/sds.html#comment-830179461">http://www.redisbook.com/en/latest/internal-datastruct/sds.html#comment-830179461</a></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p class="first">lifecoder： <a class="reference external" href="http://www.redisbook.com/en/latest/internal-datastruct/dict.html#comment-829921706">http://www.redisbook.com/en/latest/internal-datastruct/dict.html#comment-829921706</a></p>
+</li>
+<li><p class="first">许成东：</p>
+<blockquote>
+<div><ul class="simple">
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/internal/aof.html#comment-842272424">http://www.redisbook.com/en/latest/internal/aof.html#comment-842272424</a></li>
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/internal/db.html#comment-845838947">http://www.redisbook.com/en/latest/internal/db.html#comment-845838947</a></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p class="first">Liber：<a class="reference external" href="http://www.redisbook.com/en/latest/compress-datastruct/intset.html#comment-847564840">http://www.redisbook.com/en/latest/compress-datastruct/intset.html#comment-847564840</a></p>
+</li>
+<li><p class="first"><a class="reference external" href="https://github.com/yzprofile">袁茁</a> ： <a class="reference external" href="https://github.com/huangz1990/redisbook/pull/10">https://github.com/huangz1990/redisbook/pull/10</a></p>
+</li>
+<li><p class="first">Vincent：</p>
+<blockquote>
+<div><ul class="simple">
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/datatype/set.html#comment-858178830">http://www.redisbook.com/en/latest/datatype/set.html#comment-858178830</a></li>
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/datatype/set.html#comment-858176965">http://www.redisbook.com/en/latest/datatype/set.html#comment-858176965</a></li>
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/internal/db.html#comment-890402119">http://www.redisbook.com/en/latest/internal/db.html#comment-890402119</a></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p class="first">rockxsj：<a class="reference external" href="http://www.redisbook.com/en/latest/datatype/hash.html#comment-860448434">http://www.redisbook.com/en/latest/datatype/hash.html#comment-860448434</a></p>
+</li>
+<li><p class="first">jabari：</p>
+<blockquote>
+<div><ul class="simple">
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/compress-datastruct/ziplist.html#comment-860554408">http://www.redisbook.com/en/latest/compress-datastruct/ziplist.html#comment-860554408</a></li>
+<li><a class="reference external" href="http://www.redisbook.com/en/latest/internal/aof.html#comment-877666176">http://www.redisbook.com/en/latest/internal/aof.html#comment-877666176</a></li>
+</ul>
+</div></blockquote>
+</li>
+<li><p class="first">yifang：<a class="reference external" href="http://www.redisbook.com/en/latest/internal-datastruct/skiplist.html#comment-864867431">http://www.redisbook.com/en/latest/internal-datastruct/skiplist.html#comment-864867431</a></p>
+</li>
+<li><p class="first">shpng ： <a class="reference external" href="http://www.redisbook.com/en/latest/internal/ae.html#comment-1026187665">http://www.redisbook.com/en/latest/internal/ae.html#comment-1026187665</a></p>
+</li>
+</ul>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li><a href="index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

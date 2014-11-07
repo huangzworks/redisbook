@@ -1,0 +1,660 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>事件 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="服务器与客户端" href="redis.html" />
+    <link rel="prev" title="AOF" href="aof.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="redis.html" title="服务器与客户端"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="aof.html" title="AOF"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="id1">
+<h1>事件<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
+<p>事件是 Redis 服务器的核心，
+它处理两项重要的任务：</p>
+<ol class="arabic simple">
+<li>处理文件事件：在多个客户端中实现多路复用，接受它们发来的命令请求，并将命令的执行结果返回给客户端。</li>
+<li>时间事件：实现服务器常规操作（server cron job）。</li>
+</ol>
+<p>本文以下内容就来介绍这两种事件，
+以及它们背后的运作模式。</p>
+<div class="section" id="id2">
+<h2>文件事件<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>Redis 服务器通过在多个客户端之间进行多路复用，
+从而实现高效的命令请求处理：
+多个客户端通过套接字连接到 Redis 服务器中，
+但只有在套接字可以无阻塞地进行读或者写时，
+服务器才会和这些客户端进行交互。</p>
+<p>Redis 将这类因为对套接字进行多路复用而产生的事件称为文件事件（file event），
+文件事件可以分为读事件和写事件两类。</p>
+<div class="section" id="id3">
+<h3>读事件<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h3>
+<p>读事件标志着客户端命令请求的发送状态。</p>
+<p>当一个新的客户端连接到服务器时，
+服务器会给为该客户端绑定读事件，
+直到客户端断开连接之后，
+这个读事件才会被移除。</p>
+<p>读事件在整个网络连接的生命期内，
+都会在等待和就绪两种状态之间切换：</p>
+<ul class="simple">
+<li>当客户端只是连接到服务器，但并没有向服务器发送命令时，该客户端的读事件就处于等待状态。</li>
+<li>当客户端给服务器发送命令请求，并且请求已到达时（相应的套接字可以无阻塞地执行读操作），该客户端的读事件处于就绪状态。</li>
+</ul>
+<p>作为例子，
+下图展示了三个已连接到服务器、但并没有发送命令的客户端：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-b34667a48cb66a804038c7eec759ec0289167da9.svg" alt="digraph e 
+{
+
+    node [style = filled];
+
+    edge [style = &quot;dotted, bold&quot;];
+
+    rankdir = BT;
+
+    server [label = &quot;服务器&quot;, shape=circle, fillcolor = &quot;#95BBE3&quot;];
+
+    cx [label = &quot;客户端 X&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cy [label = &quot;客户端 Y&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cz [label = &quot;客户端 Z&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cx -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+    cy -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+    cz -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+}" />
+</p>
+<p>这三个客户端的状态如下表：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="19%" />
+<col width="37%" />
+<col width="44%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td>客户端</td>
+<td>读事件状态</td>
+<td>命令发送状态</td>
+</tr>
+<tr class="row-even"><td>客户端 X</td>
+<td>等待</td>
+<td>未发送</td>
+</tr>
+<tr class="row-odd"><td>客户端 Y</td>
+<td>等待</td>
+<td>未发送</td>
+</tr>
+<tr class="row-even"><td>客户端 Z</td>
+<td>等待</td>
+<td>未发送</td>
+</tr>
+</tbody>
+</table>
+<p>之后，
+当客户端 X 向服务器发送命令请求，
+并且命令请求已到达时，
+客户端 X 的读事件状态变为就绪：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-c7d00af9c8ecdddd84ca97815c785fc1a740fc64.svg" alt="digraph e 
+{
+    node [style = filled];
+
+    edge [style = &quot;dotted, bold&quot;];
+
+    rankdir = BT;
+
+    server [label = &quot;服务器&quot;, shape=circle, fillcolor = &quot;#95BBE3&quot;];
+
+    cx [label = &quot;客户端 X&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cy [label = &quot;客户端 Y&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cz [label = &quot;客户端 Z&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cx -&gt; server [style= &quot;dashed, bold&quot; , label=&quot;发送命令请求&quot;, color = &quot;#B22222&quot;];
+
+    cy -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+    cz -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+}" />
+</p>
+<p>这时，
+三个客户端的状态如下表（只有客户端 X 的状态被更新了）：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="19%" />
+<col width="37%" />
+<col width="44%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td>客户端</td>
+<td>读事件状态</td>
+<td>命令发送状态</td>
+</tr>
+<tr class="row-even"><td>客户端 X</td>
+<td><strong>就绪</strong></td>
+<td><strong>已发送，并且已到达</strong></td>
+</tr>
+<tr class="row-odd"><td>客户端 Y</td>
+<td>等待</td>
+<td>未发送</td>
+</tr>
+<tr class="row-even"><td>客户端 Z</td>
+<td>等待</td>
+<td>未发送</td>
+</tr>
+</tbody>
+</table>
+<p>当事件处理器被执行时，
+就绪的文件事件会被识别到，
+相应的命令请求会被发送到命令执行器，
+并对命令进行求值。</p>
+</div>
+<div class="section" id="id4">
+<h3>写事件<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h3>
+<p>写事件标志着客户端对命令结果的接收状态。</p>
+<p>和客户端自始至终都关联着读事件不同，
+服务器只会在有命令结果要传回给客户端时，
+才会为客户端关联写事件，
+并且在命令结果传送完毕之后，
+客户端和写事件的关联就会被移除。</p>
+<p>一个写事件会在两种状态之间切换：</p>
+<ul class="simple">
+<li>当服务器有命令结果需要返回给客户端，但客户端还未能执行无阻塞写，那么写事件处于等待状态。</li>
+<li>当服务器有命令结果需要返回给客户端，并且客户端可以进行无阻塞写，那么写事件处于就绪状态。</li>
+</ul>
+<p>当客户端向服务器发送命令请求，
+并且请求被接受并执行之后，
+服务器就需要将保存在缓存内的命令执行结果返回给客户端，
+这时服务器就会为客户端关联写事件。</p>
+<p>作为例子，
+下图展示了三个连接到服务器的客户端，
+其中服务器正等待客户端 X 变得可写，
+从而将命令的执行结果返回给它：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-3fa5735cd763caa71e083a6bfe45f2f01eb506f9.svg" alt="digraph e 
+{
+    node [style = filled];
+
+    edge [style = &quot;dotted, bold&quot;];
+
+    rankdir = BT;
+
+    server [label = &quot;服务器&quot;, shape=circle, fillcolor = &quot;#95BBE3&quot;];
+
+    cx [label = &quot;客户端 X&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cy [label = &quot;客户端 Y&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cz [label = &quot;客户端 Z&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cx -&gt; server [dir=none, style=dotted, label=&quot;等待将命令结果返回\n等待命令请求&quot;];
+    cy -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+    cz -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+}" />
+</p>
+<p>此时三个客户端的事件状态分别如下表：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="18%" />
+<col width="36%" />
+<col width="46%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td>客户端</td>
+<td>读事件状态</td>
+<td>写事件状态</td>
+</tr>
+<tr class="row-even"><td>客户端 X</td>
+<td>等待</td>
+<td>等待</td>
+</tr>
+<tr class="row-odd"><td>客户端 Y</td>
+<td>等待</td>
+<td>无</td>
+</tr>
+<tr class="row-even"><td>客户端 Z</td>
+<td>等待</td>
+<td>无</td>
+</tr>
+</tbody>
+</table>
+<p>当客户端 X 的套接字可以进行无阻塞写操作时，
+写事件就绪，
+服务器将保存在缓存内的命令执行结果返回给客户端：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-dc7ecfee261001e09df0232990301cf3dc834de7.svg" alt="digraph e 
+{
+    node [style = filled];
+
+    edge [style = &quot;dotted, bold&quot;];
+
+    rankdir = BT;
+
+    server [label = &quot;服务器&quot;, shape=circle, fillcolor = &quot;#95BBE3&quot;];
+
+    cx [label = &quot;客户端 X&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cy [label = &quot;客户端 Y&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cz [label = &quot;客户端 Z&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cx -&gt; server [dir=back, style=&quot;dashed, bold&quot;, label=&quot;返回命令执行结果\n等待命令请求&quot;, color = &quot;#B22222&quot;];
+    cy -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+    cz -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+}" />
+</p>
+<p>此时三个客户端的事件状态分别如下表（只有客户端 X 的状态被更新了）：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="18%" />
+<col width="36%" />
+<col width="46%" />
+</colgroup>
+<tbody valign="top">
+<tr class="row-odd"><td>客户端</td>
+<td>读事件状态</td>
+<td>写事件状态</td>
+</tr>
+<tr class="row-even"><td>客户端 X</td>
+<td>等待</td>
+<td><strong>已就绪</strong></td>
+</tr>
+<tr class="row-odd"><td>客户端 Y</td>
+<td>等待</td>
+<td>无</td>
+</tr>
+<tr class="row-even"><td>客户端 Z</td>
+<td>等待</td>
+<td>无</td>
+</tr>
+</tbody>
+</table>
+<p>当命令执行结果被传送回客户端之后，
+客户端和写事件之间的关联会被解除（只剩下读事件），
+至此，
+返回命令执行结果的动作执行完毕：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-b34667a48cb66a804038c7eec759ec0289167da9.svg" alt="digraph e 
+{
+
+    node [style = filled];
+
+    edge [style = &quot;dotted, bold&quot;];
+
+    rankdir = BT;
+
+    server [label = &quot;服务器&quot;, shape=circle, fillcolor = &quot;#95BBE3&quot;];
+
+    cx [label = &quot;客户端 X&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cy [label = &quot;客户端 Y&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cz [label = &quot;客户端 Z&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    cx -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+    cy -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+    cz -&gt; server [dir=none, style=dotted, label=&quot;等待命令请求&quot;];
+}" />
+</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>同时关联写事件和读事件</p>
+<p>前面提到过，读事件只有在客户端断开和服务器的连接时，才会被移除。</p>
+<p>这也就是说，当客户端关联写事件的时候，实际上它在同时关联读/写两种事件。</p>
+<p>因为在同一次文件事件处理器的调用中，
+单个客户端只能执行其中一种事件（要么读，要么写，但不能又读又写），
+当出现读事件和写事件同时就绪的情况时，
+事件处理器优先处理读事件。</p>
+<p class="last">这也就是说，
+当服务器有命令结果要返回客户端，
+而客户端又有新命令请求进入时，
+服务器先处理新命令请求。</p>
+</div>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>时间事件<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>时间事件记录着那些要在指定时间点运行的事件，
+多个时间事件以无序链表的形式保存在服务器状态中。</p>
+<p>每个时间事件主要由三个属性组成：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">when</span></code> ：以毫秒格式的 UNIX 时间戳为单位，记录了应该在什么时间点执行事件处理函数。</li>
+<li><code class="docutils literal"><span class="pre">timeProc</span></code> ：事件处理函数。</li>
+<li><code class="docutils literal"><span class="pre">next</span></code> 指向下一个时间事件，形成链表。</li>
+</ul>
+<p>根据 <code class="docutils literal"><span class="pre">timeProc</span></code> 函数的返回值，可以将时间事件划分为两类：</p>
+<ul class="simple">
+<li>如果事件处理函数返回 <code class="docutils literal"><span class="pre">ae.h/AE_NOMORE</span></code> ，那么这个事件为单次执行事件：该事件会在指定的时间被处理一次，之后该事件就会被删除，不再执行。</li>
+<li>如果事件处理函数返回一个非 <code class="docutils literal"><span class="pre">AE_NOMORE</span></code> 的整数值，那么这个事件为循环执行事件：该事件会在指定的时间被处理，之后它会按照事件处理函数的返回值，更新事件的 <code class="docutils literal"><span class="pre">when</span></code> 属性，让这个事件在之后的某个时间点再次运行，并以这种方式一直更新并运行下去。</li>
+</ul>
+<p>可以用伪代码来表示这两种事件的处理方式：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">handle_time_event</span><span class="p">(</span><span class="n">server</span><span class="p">,</span> <span class="n">time_event</span><span class="p">):</span>
+
+    <span class="c"># 执行事件处理器，并获取返回值</span>
+    <span class="c"># 返回值可以是 AE_NOMORE ，或者一个表示毫秒数的非符整数值</span>
+    <span class="n">retval</span> <span class="o">=</span> <span class="n">time_event</span><span class="o">.</span><span class="n">timeProc</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">retval</span> <span class="o">==</span> <span class="n">AE_NOMORE</span><span class="p">:</span>
+
+        <span class="c"># 如果返回 AE_NOMORE ，那么将事件从链表中删除，不再执行</span>
+        <span class="n">server</span><span class="o">.</span><span class="n">time_event_linked_list</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">time_event</span><span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>
+
+        <span class="c"># 否则，更新事件的 when 属性</span>
+        <span class="c"># 让它在当前时间之后的 retval 毫秒之后再次运行</span>
+        <span class="n">time_event</span><span class="o">.</span><span class="n">when</span> <span class="o">=</span> <span class="n">unix_ts_in_ms</span><span class="p">()</span> <span class="o">+</span> <span class="n">retval</span>
+</pre></div>
+</div>
+<p>当时间事件处理器被执行时，
+它遍历所有链表中的时间事件，
+检查它们的到达事件（<code class="docutils literal"><span class="pre">when</span></code> 属性），
+并执行其中的已到达事件：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">process_time_event</span><span class="p">(</span><span class="n">server</span><span class="p">):</span>
+
+    <span class="c"># 遍历时间事件链表</span>
+    <span class="k">for</span> <span class="n">time_event</span> <span class="ow">in</span> <span class="n">server</span><span class="o">.</span><span class="n">time_event_linked_list</span><span class="p">:</span>
+
+        <span class="c"># 检查事件是否已经到达</span>
+        <span class="k">if</span> <span class="n">time_event</span><span class="o">.</span><span class="n">when</span> <span class="o">&lt;=</span> <span class="n">unix_ts_in_ms</span><span class="p">():</span>
+
+            <span class="c"># 处理已到达事件</span>
+            <span class="n">handle_time_event</span><span class="p">(</span><span class="n">server</span><span class="p">,</span> <span class="n">time_event</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>无序链表并不影响时间事件处理器的性能</p>
+<p>在目前的版本中，
+正常模式下的 Redis 只带有 <code class="docutils literal"><span class="pre">serverCron</span></code> 一个时间事件，
+而在 benchmark 模式下，
+Redis 也只使用两个时间事件。</p>
+<p class="last">在这种情况下，
+程序几乎是将无序链表退化成一个指针来使用，
+所以使用无序链表来保存时间事件，
+并不影响事件处理器的性能。</p>
+</div>
+</div>
+<div class="section" id="id6">
+<h2>时间事件应用实例：服务器常规操作<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>对于持续运行的服务器来说，
+服务器需要定期对自身的资源和状态进行必要的检查和整理，
+从而让服务器维持在一个健康稳定的状态，
+这类操作被统称为常规操作（cron job）。</p>
+<p>在 Redis 中，
+常规操作由 <code class="docutils literal"><span class="pre">redis.c/serverCron</span></code> 实现，
+它主要执行以下操作：</p>
+<ul class="simple">
+<li>更新服务器的各类统计信息，比如时间、内存占用、数据库占用情况等。</li>
+<li>清理数据库中的过期键值对。</li>
+<li>对不合理的数据库进行大小调整。</li>
+<li>关闭和清理连接失效的客户端。</li>
+<li>尝试进行 AOF 或 RDB 持久化操作。</li>
+<li>如果服务器是主节点的话，对附属节点进行定期同步。</li>
+<li>如果处于集群模式的话，对集群进行定期同步和连接测试。</li>
+</ul>
+<p>Redis 将 <code class="docutils literal"><span class="pre">serverCron</span></code> 作为时间事件来运行，
+从而确保它每隔一段时间就会自动运行一次，
+又因为 <code class="docutils literal"><span class="pre">serverCron</span></code> 需要在 Redis 服务器运行期间一直定期运行，
+所以它是一个循环时间事件：
+<code class="docutils literal"><span class="pre">serverCron</span></code> 会一直定期执行，直到服务器关闭为止。</p>
+<p>在 Redis 2.6 版本中，
+程序规定 <code class="docutils literal"><span class="pre">serverCron</span></code> 每秒运行 <code class="docutils literal"><span class="pre">10</span></code> 次，
+平均每 <code class="docutils literal"><span class="pre">100</span></code> 毫秒运行一次。
+从 Redis 2.8 开始，
+用户可以通过修改 <code class="docutils literal"><span class="pre">hz</span></code> 选项来调整 <code class="docutils literal"><span class="pre">serverCron</span></code> 的每秒执行次数，
+具体信息请参考 <code class="docutils literal"><span class="pre">redis.conf</span></code> 文件中关于 <code class="docutils literal"><span class="pre">hz</span></code> 选项的说明。</p>
+</div>
+<div class="section" id="id7">
+<h2>事件的执行与调度<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p>既然 Redis 里面既有文件事件，
+又有时间事件，
+那么如何调度这两种事件就成了一个关键问题。</p>
+<p>简单地说，
+Redis 里面的两种事件呈合作关系，
+它们之间包含以下三种属性：</p>
+<ol class="arabic simple">
+<li>一种事件会等待另一种事件执行完毕之后，才开始执行，事件之间不会出现抢占。</li>
+<li>事件处理器先处理文件事件（处理命令请求），再执行时间事件（调用 <code class="docutils literal"><span class="pre">serverCron</span></code>）</li>
+<li>文件事件的等待时间（类 <code class="docutils literal"><span class="pre">poll</span></code> 函数的最大阻塞时间），由距离到达时间最短的时间事件决定。</li>
+</ol>
+<p>这些属性表明，
+实际处理时间事件的时间，
+通常会比时间事件所预定的时间要晚，
+至于延迟的时间有多长，
+取决于时间事件执行之前，
+执行文件事件所消耗的时间。</p>
+<p>比如说，
+以下图表就展示了，
+虽然时间事件 <code class="docutils literal"><span class="pre">TE</span> <span class="pre">1</span></code> 预定在 <code class="docutils literal"><span class="pre">t1</span></code> 时间执行，
+但因为文件事件 <code class="docutils literal"><span class="pre">FE</span> <span class="pre">1</span></code> 正在运行，
+所以 <code class="docutils literal"><span class="pre">TE</span> <span class="pre">1</span></code> 的执行被延迟了：</p>
+<div class="highlight-c"><div class="highlight"><pre>                      <span class="n">t1</span>
+                      <span class="o">|</span>
+                      <span class="n">V</span>
+<span class="n">time</span> <span class="o">-----------------+-------------------&gt;|</span>
+
+     <span class="o">|</span>       <span class="n">FE</span> <span class="mi">1</span>              <span class="o">|</span>   <span class="n">TE</span> <span class="mi">1</span>    <span class="o">|</span>
+
+                      <span class="o">|&lt;------&gt;|</span>
+                        <span class="n">TE</span> <span class="mi">1</span>
+                        <span class="n">delay</span>
+                        <span class="n">time</span>
+</pre></div>
+</div>
+<p>另外，
+对于像 <code class="docutils literal"><span class="pre">serverCron</span></code> 这类循环执行的时间事件来说，
+如果事件处理器的返回值是 <code class="docutils literal"><span class="pre">t</span></code> ，
+那么 Redis 只保证：</p>
+<ul class="simple">
+<li>如果两次执行时间事件处理器之间的时间间隔大于等于 <code class="docutils literal"><span class="pre">t</span></code> ， 那么这个时间事件至少会被处理一次。</li>
+<li>而并不是说， 每隔 <code class="docutils literal"><span class="pre">t</span></code> 时间， 就一定要执行一次事件 ——  这对于不使用抢占调度的 Redis 事件处理器来说，也是不可能做到的</li>
+</ul>
+<p>举个例子，
+虽然 <code class="docutils literal"><span class="pre">serverCron</span></code> （<code class="docutils literal"><span class="pre">sC</span></code>）设定的间隔为 <code class="docutils literal"><span class="pre">10</span></code> 毫秒，
+但它并不是像如下那样每隔 <code class="docutils literal"><span class="pre">10</span></code> 毫秒就运行一次：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">time</span> <span class="o">-----------------------------------------------------&gt;|</span>
+
+     <span class="o">|&lt;----</span> <span class="mi">10</span> <span class="n">ms</span> <span class="o">----&gt;|&lt;----</span> <span class="mi">10</span> <span class="n">ms</span> <span class="o">----&gt;|&lt;----</span> <span class="mi">10</span> <span class="n">ms</span> <span class="o">----&gt;|</span>
+
+     <span class="o">|</span> <span class="n">FE</span> <span class="mi">1</span> <span class="o">|</span> <span class="n">FE</span> <span class="mi">2</span>     <span class="o">|</span> <span class="n">sC</span> <span class="mi">1</span> <span class="o">|</span> <span class="n">FE</span> <span class="mi">3</span>     <span class="o">|</span>  <span class="n">sC</span> <span class="mi">2</span> <span class="o">|</span>  <span class="n">FE</span> <span class="mi">4</span>   <span class="o">|</span>
+
+     <span class="o">^</span>                 <span class="o">^</span>      <span class="o">^</span>          <span class="o">^</span>       <span class="o">^</span>
+     <span class="o">|</span>                 <span class="o">|</span>      <span class="o">|</span>          <span class="o">|</span>       <span class="o">|</span>
+   <span class="n">file</span> <span class="n">event</span>      <span class="n">time</span> <span class="n">event</span> <span class="o">|</span>      <span class="n">time</span> <span class="n">event</span>  <span class="o">|</span>
+   <span class="n">handler</span>         <span class="n">handler</span>    <span class="o">|</span>      <span class="n">handler</span>     <span class="o">|</span>
+   <span class="n">run</span>             <span class="n">run</span>        <span class="o">|</span>      <span class="n">run</span>         <span class="o">|</span>
+                          <span class="n">file</span> <span class="n">event</span>          <span class="n">file</span> <span class="n">event</span>
+                          <span class="n">handler</span>             <span class="n">handler</span>
+                          <span class="n">run</span>                 <span class="n">run</span>
+</pre></div>
+</div>
+<p>在实际中，
+<code class="docutils literal"><span class="pre">serverCron</span></code> 的运行方式更可能是这样子的：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">time</span> <span class="o">-----------------------------------------------------------------------&gt;|</span>
+
+     <span class="o">|&lt;----</span> <span class="mi">10</span> <span class="n">ms</span> <span class="o">----&gt;|&lt;----</span> <span class="mi">10</span> <span class="n">ms</span> <span class="o">----&gt;|&lt;----</span> <span class="mi">10</span> <span class="n">ms</span> <span class="o">----&gt;|&lt;----</span> <span class="mi">10</span> <span class="n">ms</span> <span class="o">----&gt;|</span>
+
+     <span class="o">|</span> <span class="n">FE</span> <span class="mi">1</span>         <span class="o">|</span> <span class="n">FE</span> <span class="mi">2</span>     <span class="o">|</span> <span class="n">sC</span> <span class="mi">1</span> <span class="o">|</span> <span class="n">FE</span> <span class="mi">3</span> <span class="o">|</span> <span class="n">FE</span> <span class="mi">4</span> <span class="o">|</span>   <span class="n">FE</span> <span class="mi">5</span>  <span class="o">|</span>    <span class="n">sC</span> <span class="mi">2</span>  <span class="o">|</span>
+
+     <span class="o">|&lt;--------</span> <span class="mi">15</span> <span class="n">ms</span> <span class="o">--------&gt;|</span>      <span class="o">|&lt;-------</span> <span class="mi">12</span> <span class="n">ms</span> <span class="o">-------&gt;|</span>
+            <span class="o">&gt;=</span> <span class="mi">10</span> <span class="n">ms</span>                          <span class="o">&gt;=</span> <span class="mi">10</span> <span class="n">ms</span>
+     <span class="o">^</span>                         <span class="o">^</span>      <span class="o">^</span>                       <span class="o">^</span>
+     <span class="o">|</span>                         <span class="o">|</span>      <span class="o">|</span>                       <span class="o">|</span>
+  <span class="n">file</span> <span class="n">event</span>              <span class="n">time</span> <span class="n">event</span>  <span class="o">|</span>                  <span class="n">time</span> <span class="n">event</span>
+  <span class="n">handler</span>                 <span class="n">handler</span>     <span class="o">|</span>                  <span class="n">handler</span>
+  <span class="n">run</span>                     <span class="n">run</span>         <span class="o">|</span>                  <span class="n">run</span>
+                                 <span class="n">file</span> <span class="n">event</span>
+                                 <span class="n">handler</span>
+                                 <span class="n">run</span>
+</pre></div>
+</div>
+<p>根据情况，
+如果处理文件事件耗费了非常多的时间，
+<code class="docutils literal"><span class="pre">serverCron</span></code> 被推迟到一两秒之后才能执行，
+也是有可能的。</p>
+<p>整个事件处理器程序可以用以下伪代码描述：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">process_event</span><span class="p">():</span>
+
+    <span class="c"># 获取执行时间最接近现在的一个时间事件</span>
+    <span class="n">te</span> <span class="o">=</span> <span class="n">get_nearest_time_event</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">time_event_linked_list</span><span class="p">)</span>
+
+    <span class="c"># 检查该事件的执行时间和现在时间之差</span>
+    <span class="c"># 如果值 &lt;= 0 ，那么说明至少有一个时间事件已到达</span>
+    <span class="c"># 如果值 &gt; 0 ，那么说明目前没有任何时间事件到达</span>
+    <span class="n">nearest_te_remaind_ms</span> <span class="o">=</span> <span class="n">te</span><span class="o">.</span><span class="n">when</span> <span class="o">-</span> <span class="n">now_in_ms</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">nearest_te_remaind_ms</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+
+        <span class="c"># 如果有时间事件已经到达</span>
+        <span class="c"># 那么调用不阻塞的文件事件等待函数</span>
+        <span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="bp">None</span><span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>
+
+        <span class="c"># 如果时间事件还没到达</span>
+        <span class="c"># 那么阻塞的最大时间不超过 te 的到达时间</span>
+        <span class="n">poll</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">nearest_te_remaind_ms</span><span class="p">)</span>
+
+    <span class="c"># 处理已就绪文件事件</span>
+    <span class="n">process_file_events</span><span class="p">()</span>
+
+    <span class="c"># 处理已到达时间事件</span>
+    <span class="n">process_time_event</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>通过这段代码，
+可以清晰地看出：</p>
+<ul class="simple">
+<li>到达时间最近的时间事件，决定了 <code class="docutils literal"><span class="pre">poll</span></code> 的最大阻塞时长。</li>
+<li>文件事件先于时间事件处理。</li>
+</ul>
+<p>将这个事件处理函数置于一个循环中，
+加上初始化和清理函数，
+这就构成了 Redis 服务器的主函数调用：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">redis_main</span><span class="p">():</span>
+
+    <span class="c"># 初始化服务器</span>
+    <span class="n">init_server</span><span class="p">()</span>
+
+    <span class="c"># 一直处理事件，直到服务器关闭为止</span>
+    <span class="k">while</span> <span class="n">server_is_not_shutdown</span><span class="p">():</span>
+        <span class="n">process_event</span><span class="p">()</span>
+
+    <span class="c"># 清理服务器</span>
+    <span class="n">clean_server</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="id8">
+<h2>小结<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>Redis 的事件分为时间事件和文件事件两类。</li>
+<li>文件事件分为读事件和写事件两类：读事件实现了命令请求的接收，写事件实现了命令结果的返回。</li>
+<li>时间事件分为单次执行事件和循环执行事件，服务器常规操作 <code class="docutils literal"><span class="pre">serverCron</span></code> 就是循环事件。</li>
+<li>文件事件和时间事件之间是合作关系：一种事件会等待另一种事件完成之后再执行，不会出现抢占情况。</li>
+<li>时间事件的实际执行时间通常会比预定时间晚一些。</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="redis.html" title="服务器与客户端"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="aof.html" title="AOF"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

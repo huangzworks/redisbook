@@ -1,0 +1,482 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>RDB &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="AOF" href="aof.html" />
+    <link rel="prev" title="数据库" href="db.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="aof.html" title="AOF"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="db.html" title="数据库"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="rdb">
+<h1>RDB<a class="headerlink" href="#rdb" title="Permalink to this headline">¶</a></h1>
+<p>在运行情况下，
+Redis 以数据结构的形式将数据维持在内存中，
+为了让这些数据在 Redis 重启之后仍然可用，
+Redis 分别提供了 RDB 和 AOF 两种<a class="reference external" href="http://en.wikipedia.org/wiki/Persistence_(computer_science)">持久化</a>模式。</p>
+<p>在 Redis 运行时，
+RDB 程序将当前内存中的数据库快照保存到磁盘文件中，
+在 Redis 重启动时，
+RDB 程序可以通过载入 RDB 文件来还原数据库的状态。</p>
+<p>RDB 功能最核心的是 <code class="docutils literal"><span class="pre">rdbSave</span></code> 和 <code class="docutils literal"><span class="pre">rdbLoad</span></code> 两个函数，
+前者用于生成 RDB 文件到磁盘，
+而后者则用于将 RDB 文件中的数据重新载入到内存中：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-cd96bfa5c61ef2b8dd69a9b0a97cde047cb722a8.svg" alt="digraph persistent {
+
+    rankdir = LR;
+
+    node [shape = circle, style = filled];
+
+    edge [style = bold];
+
+    redis_object [label = &quot;内存中的\n数据对象&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    rdb [label = &quot;磁盘中的\nRDB文件&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    redis_object -&gt; rdb [label = &quot;rdbSave&quot;];
+
+    rdb -&gt; redis_object [label = &quot;rdbLoad&quot;];
+}" />
+</p>
+<p>本章先介绍 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 命令的实现，
+以及 <code class="docutils literal"><span class="pre">rdbSave</span></code> 和 <code class="docutils literal"><span class="pre">rdbLoad</span></code> 两个函数的运行机制，
+然后以图表的方式，
+分部分来介绍 RDB 文件的组织形式。</p>
+<p>因为本章涉及 RDB 运行的相关机制，
+如果还没了解过 RDB 功能的话，
+请先阅读 <a class="reference external" href="http://redis.io/topics/persistence">Redis 官网上的 persistence 手册</a> 。</p>
+<div class="section" id="id2">
+<h2>保存<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">rdbSave</span></code> 函数负责将内存中的数据库数据以 RDB 格式保存到磁盘中，
+如果 RDB 文件已存在，
+那么新的 RDB 文件将替换已有的 RDB 文件。</p>
+<p>在保存 RDB 文件期间，
+主进程会被阻塞，
+直到保存完成为止。</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 两个命令都会调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> 函数，但它们调用的方式各有不同：</p>
+<ul class="simple">
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 直接调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，阻塞 Redis 主进程，直到保存完成为止。在主进程阻塞期间，服务器不能处理客户端的任何请求。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 则 <code class="docutils literal"><span class="pre">fork</span></code> 出一个子进程，子进程负责调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，并在保存完成之后向主进程发送信号，通知保存已完成。因为 <code class="docutils literal"><span class="pre">rdbSave</span></code> 在子进程被调用，所以 Redis 服务器在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 执行期间仍然可以继续处理客户端的请求。</li>
+</ul>
+<p>通过伪代码来描述这两个命令，可以很容易地看出它们之间的区别：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">SAVE</span><span class="p">():</span>
+
+    <span class="n">rdbSave</span><span class="p">()</span>
+
+
+<span class="k">def</span> <span class="nf">BGSAVE</span><span class="p">():</span>
+
+    <span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="n">pid</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+
+        <span class="c"># 子进程保存 RDB</span>
+        <span class="n">rdbSave</span><span class="p">()</span>
+
+    <span class="k">elif</span> <span class="n">pid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+
+        <span class="c"># 父进程继续处理请求，并等待子进程的完成信号</span>
+        <span class="n">handle_request</span><span class="p">()</span>
+
+    <span class="k">else</span><span class="p">:</span>
+
+        <span class="c"># pid == -1</span>
+        <span class="c"># 处理 fork 错误</span>
+        <span class="n">handle_fork_error</span><span class="p">()</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="save-bgsave-aof-bgrewriteaof">
+<h2>SAVE 、 BGSAVE 、 AOF 写入和 BGREWRITEAOF<a class="headerlink" href="#save-bgsave-aof-bgrewriteaof" title="Permalink to this headline">¶</a></h2>
+<p>除了了解 RDB 文件的保存方式之外，
+我们可能还想知道，
+两个 RDB 保存命令能否同时使用？
+它们和 AOF 保存工作是否冲突？</p>
+<p>本节就来解答这些问题。</p>
+<div class="section" id="save">
+<h3>SAVE<a class="headerlink" href="#save" title="Permalink to this headline">¶</a></h3>
+<p>前面提到过，
+当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 执行时，
+Redis 服务器是阻塞的，
+所以当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 正在执行时，
+新的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 调用都不会产生任何作用。</p>
+<p>只有在上一个 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 执行完毕、
+Redis 重新开始接受请求之后，
+新的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 命令才会被处理。</p>
+<p>另外，
+因为 AOF 写入由后台线程完成，
+而 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 则由子进程完成，
+所以在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 执行的过程中，
+AOF 写入和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 可以同时进行。</p>
+</div>
+<div class="section" id="bgsave">
+<h3>BGSAVE<a class="headerlink" href="#bgsave" title="Permalink to this headline">¶</a></h3>
+<p>在执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 命令之前，
+服务器会检查 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 是否正在执行当中，
+如果是的话，
+服务器就不调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，
+而是向客户端返回一个出错信息，
+告知在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 执行期间，
+不能执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 。</p>
+<p>这样做可以避免 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 调用的两个 <code class="docutils literal"><span class="pre">rdbSave</span></code> 交叉执行，
+造成竞争条件。</p>
+<p>另一方面，
+当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 正在执行时，
+调用新 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 命令的客户端会收到一个出错信息，
+告知 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 已经在执行当中。</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 不能同时执行：</p>
+<ul class="simple">
+<li>如果 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 正在执行，那么 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 的重写请求会被延迟到 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 执行完毕之后进行，执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 命令的客户端会收到请求被延迟的回复。</li>
+<li>如果 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 正在执行，那么调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 的客户端将收到出错信息，表示这两个命令不能同时执行。</li>
+</ul>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 两个命令在操作方面并没有什么冲突的地方，
+不能同时执行它们只是一个性能方面的考虑：
+并发出两个子进程，
+并且两个子进程都同时进行大量的磁盘写入操作，
+这怎么想都不会是一个好主意。</p>
+</div>
+</div>
+<div class="section" id="id3">
+<h2>载入<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>当 Redis 服务器启动时，
+<code class="docutils literal"><span class="pre">rdbLoad</span></code> 函数就会被执行，
+它读取 RDB 文件，
+并将文件中的数据库数据载入到内存中。</p>
+<p>在载入期间，
+服务器每载入 1000 个键就处理一次所有已到达的请求，
+不过只有 <code class="docutils literal"><span class="pre">PUBLISH</span></code> 、 <code class="docutils literal"><span class="pre">SUBSCRIBE</span></code> 、 <code class="docutils literal"><span class="pre">PSUBSCRIBE</span></code> 、 <code class="docutils literal"><span class="pre">UNSUBSCRIBE</span></code> 、 <code class="docutils literal"><span class="pre">PUNSUBSCRIBE</span></code> 五个命令的请求会被正确地处理，
+其他命令一律返回错误。
+等到载入完成之后，
+服务器才会开始正常处理所有命令。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">发布与订阅功能和其他数据库功能是完全隔离的，前者不写入也不读取数据库，所以在服务器载入期间，订阅与发布功能仍然可以正常使用，而不必担心对载入数据的完整性产生影响。</p>
+</div>
+<p>另外，
+因为 AOF 文件的保存频率通常要高于 RDB 文件保存的频率，
+所以一般来说，
+AOF 文件中的数据会比 RDB 文件中的数据要新。</p>
+<p>因此，
+如果服务器在启动时，
+打开了 AOF 功能，
+那么程序优先使用 AOF 文件来还原数据。
+只有在 AOF 功能未打开的情况下，
+Redis 才会使用 RDB 文件来还原数据。</p>
+</div>
+<div class="section" id="id4">
+<h2>RDB 文件结构<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>前面介绍了保存和读取 RDB 文件的两个函数，现在，是时候介绍 RDB 文件本身了。</p>
+<p>一个 RDB 文件可以分为以下几个部分：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+-------+-------------+-----------+-----------------+-----+-----------+</span>
+<span class="o">|</span> <span class="n">REDIS</span> <span class="o">|</span> <span class="n">RDB</span><span class="o">-</span><span class="n">VERSION</span> <span class="o">|</span> <span class="n">SELECT</span><span class="o">-</span><span class="n">DB</span> <span class="o">|</span> <span class="n">KEY</span><span class="o">-</span><span class="n">VALUE</span><span class="o">-</span><span class="n">PAIRS</span> <span class="o">|</span> <span class="n">EOF</span> <span class="o">|</span> <span class="n">CHECK</span><span class="o">-</span><span class="n">SUM</span> <span class="o">|</span>
+<span class="o">+-------+-------------+-----------+-----------------+-----+-----------+</span>
+
+                      <span class="o">|&lt;--------</span> <span class="n">DB</span><span class="o">-</span><span class="n">DATA</span> <span class="o">----------&gt;|</span>
+</pre></div>
+</div>
+<p>以下的几个小节将分别对这几个部分的保存和读入规则进行介绍。</p>
+<div class="section" id="redis">
+<h3>REDIS<a class="headerlink" href="#redis" title="Permalink to this headline">¶</a></h3>
+<p>文件的最开头保存着 <code class="docutils literal"><span class="pre">REDIS</span></code> 五个字符，标识着一个 RDB 文件的开始。</p>
+<p>在读入文件的时候，程序可以通过检查一个文件的前五个字节，来快速地判断该文件是否有可能是 RDB 文件。</p>
+</div>
+<div class="section" id="rdb-version">
+<h3>RDB-VERSION<a class="headerlink" href="#rdb-version" title="Permalink to this headline">¶</a></h3>
+<p>一个四字节长的以字符表示的整数，记录了该文件所使用的 RDB 版本号。</p>
+<p>目前的 RDB 文件版本为 <code class="docutils literal"><span class="pre">0006</span></code> 。</p>
+<p>因为不同版本的 RDB 文件互不兼容，所以在读入程序时，需要根据版本来选择不同的读入方式。</p>
+</div>
+<div class="section" id="db-data">
+<h3>DB-DATA<a class="headerlink" href="#db-data" title="Permalink to this headline">¶</a></h3>
+<p>这个部分在一个 RDB 文件中会出现任意多次，每个 <code class="docutils literal"><span class="pre">DB-DATA</span></code> 部分保存着服务器上一个非空数据库的所有数据。</p>
+</div>
+<div class="section" id="select-db">
+<h3>SELECT-DB<a class="headerlink" href="#select-db" title="Permalink to this headline">¶</a></h3>
+<p>这域保存着跟在后面的键值对所属的数据库号码。</p>
+<p>在读入 RDB 文件时，程序会根据这个域的值来切换数据库，确保数据被还原到正确的数据库上。</p>
+</div>
+<div class="section" id="key-value-pairs">
+<h3>KEY-VALUE-PAIRS<a class="headerlink" href="#key-value-pairs" title="Permalink to this headline">¶</a></h3>
+<p>因为空的数据库不会被保存到 RDB 文件，所以这个部分至少会包含一个键值对的数据。</p>
+<p>每个键值对的数据使用以下结构来保存：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+----------------------+---------------+-----+-------+</span>
+<span class="o">|</span> <span class="n">OPTIONAL</span><span class="o">-</span><span class="n">EXPIRE</span><span class="o">-</span><span class="n">TIME</span> <span class="o">|</span> <span class="n">TYPE</span><span class="o">-</span><span class="n">OF</span><span class="o">-</span><span class="n">VALUE</span> <span class="o">|</span> <span class="n">KEY</span> <span class="o">|</span> <span class="n">VALUE</span> <span class="o">|</span>
+<span class="o">+----------------------+---------------+-----+-------+</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">OPTIONAL-EXPIRE-TIME</span></code> 域是可选的，如果键没有设置过期时间，那么这个域就不会出现；
+反之，如果这个域出现的话，那么它记录着键的过期时间，在当前版本的 RDB 中，过期时间是一个以毫秒为单位的 UNIX 时间戳。</p>
+<p><code class="docutils literal"><span class="pre">KEY</span></code> 域保存着键，格式和 <code class="docutils literal"><span class="pre">REDIS_ENCODING_RAW</span></code> 编码的字符串对象一样（见下文）。</p>
+<p><code class="docutils literal"><span class="pre">TYPE-OF-VALUE</span></code> 域记录着 <code class="docutils literal"><span class="pre">VALUE</span></code> 域的值所使用的编码，
+根据这个域的指示，
+程序会使用不同的方式来保存和读取 <code class="docutils literal"><span class="pre">VALUE</span></code> 的值。</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">下文提到的编码在《<a class="reference internal" href="../datatype/object.html#object-chapter"><em>对象处理机制</em></a>》章节介绍过，如果忘记了可以回去重温下。</p>
+</div>
+<p>保存 <code class="docutils literal"><span class="pre">VALUE</span></code> 的详细格式如下：</p>
+<ul>
+<li><p class="first"><code class="docutils literal"><span class="pre">REDIS_ENCODING_INT</span></code> 编码的 <code class="docutils literal"><span class="pre">REDIS_STRING</span></code> 类型对象：</p>
+<p>如果值可以表示为 <code class="docutils literal"><span class="pre">8</span></code> 位、 <code class="docutils literal"><span class="pre">16</span></code> 位或 <code class="docutils literal"><span class="pre">32</span></code> 位有符号整数，那么直接以整数类型的形式来保存它们：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+---------+</span>
+<span class="o">|</span> <span class="n">integer</span> <span class="o">|</span>
+<span class="o">+---------+</span>
+</pre></div>
+</div>
+<p>比如说，整数 <code class="docutils literal"><span class="pre">8</span></code> 可以用 <code class="docutils literal"><span class="pre">8</span></code> 位序列 <code class="docutils literal"><span class="pre">00001000</span></code> 保存。</p>
+<p>当读入这类值时，程序按指定的长度读入字节数据，然后将数据转换回整数类型。</p>
+<p>另一方面，如果值不能被表示为最高 <code class="docutils literal"><span class="pre">32</span></code> 位的有符号整数，那么说明这是一个 <code class="docutils literal"><span class="pre">long</span> <span class="pre">long</span></code> 类型的值，在 RDB 文件中，这种类型的值以字符序列的形式保存。</p>
+<p>一个字符序列由两部分组成：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+-----+---------+</span>
+<span class="o">|</span> <span class="n">LEN</span> <span class="o">|</span> <span class="n">CONTENT</span> <span class="o">|</span>
+<span class="o">+-----+---------+</span>
+</pre></div>
+</div>
+<p>其中， <code class="docutils literal"><span class="pre">CONTENT</span></code> 域保存了字符内容，而 <code class="docutils literal"><span class="pre">LEN</span></code> 则保存了以字节为单位的字符长度。</p>
+<p>当进行载入时，读入器先读入 <code class="docutils literal"><span class="pre">LEN</span></code> ，创建一个长度等于 <code class="docutils literal"><span class="pre">LEN</span></code> 的字符串对象，然后再从文件中读取 <code class="docutils literal"><span class="pre">LEN</span></code> 字节数据，并将这些数据设置为字符串对象的值。</p>
+</li>
+<li><p class="first"><code class="docutils literal"><span class="pre">REDIS_ENCODING_RAW</span></code> 编码的 <code class="docutils literal"><span class="pre">REDIS_STRING</span></code> 类型值有三种保存方式：</p>
+<ol class="arabic">
+<li><p class="first">如果值可以表示为 <code class="docutils literal"><span class="pre">8</span></code> 位、 <code class="docutils literal"><span class="pre">16</span></code> 位或 <code class="docutils literal"><span class="pre">32</span></code> 位长的有符号整数，那么用整数类型的形式来保存它们。</p>
+</li>
+<li><p class="first">如果字符串长度大于 <code class="docutils literal"><span class="pre">20</span></code> ，并且服务器开启了 <a class="reference external" href="http://oldhome.schmorp.de/marc/liblzf.html">LZF 压缩功能</a> ，那么对字符串进行压缩，并保存压缩之后的数据。</p>
+<p>经过 LZF 压缩的字符串会被保存为以下结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+----------+----------------+--------------------+</span>
+<span class="o">|</span> <span class="n">LZF</span><span class="o">-</span><span class="n">FLAG</span> <span class="o">|</span> <span class="n">COMPRESSED</span><span class="o">-</span><span class="n">LEN</span> <span class="o">|</span> <span class="n">COMPRESSED</span><span class="o">-</span><span class="n">CONTENT</span> <span class="o">|</span>
+<span class="o">+----------+----------------+--------------------+</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">LZF-FLAG</span></code> 告知读入器，后面跟着的是被 LZF 算法压缩过的数据。</p>
+<p><code class="docutils literal"><span class="pre">COMPRESSED-CONTENT</span></code> 是被压缩后的数据， <code class="docutils literal"><span class="pre">COMPRESSED-LEN</span></code> 则是该数据的字节长度。</p>
+</li>
+<li><p class="first">在其他情况下，程序直接以普通字节序列的方式来保存字符串。比如说，对于一个长度为 <code class="docutils literal"><span class="pre">20</span></code> 字节的字符串，需要使用 <code class="docutils literal"><span class="pre">20</span></code> 字节的空间来保存它。</p>
+<p>这种字符串被保存为以下结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+-----+---------+</span>
+<span class="o">|</span> <span class="n">LEN</span> <span class="o">|</span> <span class="n">CONTENT</span> <span class="o">|</span>
+<span class="o">+-----+---------+</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">LEN</span></code> 为字符串的字节长度， <code class="docutils literal"><span class="pre">CONTENT</span></code> 为字符串。</p>
+</li>
+</ol>
+<p>当进行载入时，读入器先检测字符串保存的方式，再根据不同的保存方式，用不同的方法取出内容，并将内容保存到新建的字符串对象当中。</p>
+</li>
+<li><p class="first"><code class="docutils literal"><span class="pre">REDIS_ENCODING_LINKEDLIST</span></code> 编码的 <code class="docutils literal"><span class="pre">REDIS_LIST</span></code> 类型值保存为以下结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+-----------+--------------+--------------+-----+--------------+</span>
+<span class="o">|</span> <span class="n">NODE</span><span class="o">-</span><span class="n">SIZE</span> <span class="o">|</span> <span class="n">NODE</span><span class="o">-</span><span class="n">VALUE</span><span class="o">-</span><span class="mi">1</span> <span class="o">|</span> <span class="n">NODE</span><span class="o">-</span><span class="n">VALUE</span><span class="o">-</span><span class="mi">2</span> <span class="o">|</span> <span class="p">...</span> <span class="o">|</span> <span class="n">NODE</span><span class="o">-</span><span class="n">VALUE</span><span class="o">-</span><span class="n">N</span> <span class="o">|</span>
+<span class="o">+-----------+--------------+--------------+-----+--------------+</span>
+</pre></div>
+</div>
+<p>其中 <code class="docutils literal"><span class="pre">NODE-SIZE</span></code> 保存链表节点数量，后面跟着 <code class="docutils literal"><span class="pre">NODE-SIZE</span></code> 个节点值。节点值的保存方式和字符串的保存方式一样。</p>
+<p>当进行载入时，读入器读取节点的数量，创建一个新的链表，然后一直执行以下步骤，直到指定节点数量满足为止：</p>
+<ol class="arabic simple">
+<li>读取字符串表示的节点值</li>
+<li>将包含节点值的新节点添加到链表中</li>
+</ol>
+</li>
+<li><p class="first"><code class="docutils literal"><span class="pre">REDIS_ENCODING_HT</span></code> 编码的 <code class="docutils literal"><span class="pre">REDIS_SET</span></code> 类型值保存为以下结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+----------+-----------+-----------+-----+-----------+</span>
+<span class="o">|</span> <span class="n">SET</span><span class="o">-</span><span class="n">SIZE</span> <span class="o">|</span> <span class="n">ELEMENT</span><span class="o">-</span><span class="mi">1</span> <span class="o">|</span> <span class="n">ELEMENT</span><span class="o">-</span><span class="mi">2</span> <span class="o">|</span> <span class="p">...</span> <span class="o">|</span> <span class="n">ELEMENT</span><span class="o">-</span><span class="n">N</span> <span class="o">|</span>
+<span class="o">+----------+-----------+-----------+-----+-----------+</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">SET-SIZE</span></code> 记录了集合元素的数量，后面跟着多个元素值。元素值的保存方式和字符串的保存方式一样。</p>
+<p>载入时，读入器先读入集合元素的数量 <code class="docutils literal"><span class="pre">SET-SIZE</span></code> ，再连续读入 <code class="docutils literal"><span class="pre">SET-SIZE</span></code> 个字符串，并将这些字符串作为新元素添加至新创建的集合。</p>
+</li>
+<li><p class="first"><code class="docutils literal"><span class="pre">REDIS_ENCODING_SKIPLIST</span></code> 编码的 <code class="docutils literal"><span class="pre">REDIS_ZSET</span></code> 类型值保存为以下结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+--------------+-------+---------+-------+---------+-----+-------+---------+</span>
+<span class="o">|</span> <span class="n">ELEMENT</span><span class="o">-</span><span class="n">SIZE</span> <span class="o">|</span> <span class="n">MEB</span><span class="o">-</span><span class="mi">1</span> <span class="o">|</span> <span class="n">SCORE</span><span class="o">-</span><span class="mi">1</span> <span class="o">|</span> <span class="n">MEB</span><span class="o">-</span><span class="mi">2</span> <span class="o">|</span> <span class="n">SCORE</span><span class="o">-</span><span class="mi">2</span> <span class="o">|</span> <span class="p">...</span> <span class="o">|</span> <span class="n">MEB</span><span class="o">-</span><span class="n">N</span> <span class="o">|</span> <span class="n">SCORE</span><span class="o">-</span><span class="n">N</span> <span class="o">|</span>
+<span class="o">+--------------+-------+---------+-------+---------+-----+-------+---------+</span>
+</pre></div>
+</div>
+<p>其中 <code class="docutils literal"><span class="pre">ELEMENT-SIZE</span></code> 为有序集元素的数量， <code class="docutils literal"><span class="pre">MEB-i</span></code> 为第 <code class="docutils literal"><span class="pre">i</span></code> 个有序集元素的成员， <code class="docutils literal"><span class="pre">SCORE-i</span></code> 为第 <code class="docutils literal"><span class="pre">i</span></code> 个有序集元素的分值。</p>
+<p>当进行载入时，读入器读取有序集元素数量，创建一个新的有序集，然后一直执行以下步骤，直到指定元素数量满足为止：</p>
+<ol class="arabic simple">
+<li>读入字符串形式保存的成员 <code class="docutils literal"><span class="pre">member</span></code></li>
+<li>读入字符串形式保存的分值 <code class="docutils literal"><span class="pre">score</span></code> ，并将它转换为浮点数</li>
+<li>添加 <code class="docutils literal"><span class="pre">member</span></code> 为成员、 <code class="docutils literal"><span class="pre">score</span></code> 为分值的新元素到有序集</li>
+</ol>
+</li>
+<li><p class="first"><code class="docutils literal"><span class="pre">REDIS_ENCODING_HT</span></code> 编码的 <code class="docutils literal"><span class="pre">REDIS_HASH</span></code> 类型值保存为以下结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+-----------+-------+---------+-------+---------+-----+-------+---------+</span>
+<span class="o">|</span> <span class="n">HASH</span><span class="o">-</span><span class="n">SIZE</span> <span class="o">|</span> <span class="n">KEY</span><span class="o">-</span><span class="mi">1</span> <span class="o">|</span> <span class="n">VALUE</span><span class="o">-</span><span class="mi">1</span> <span class="o">|</span> <span class="n">KEY</span><span class="o">-</span><span class="mi">2</span> <span class="o">|</span> <span class="n">VALUE</span><span class="o">-</span><span class="mi">2</span> <span class="o">|</span> <span class="p">...</span> <span class="o">|</span> <span class="n">KEY</span><span class="o">-</span><span class="n">N</span> <span class="o">|</span> <span class="n">VALUE</span><span class="o">-</span><span class="n">N</span> <span class="o">|</span>
+<span class="o">+-----------+-------+---------+-------+---------+-----+-------+---------+</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">HASH-SIZE</span></code> 是哈希表包含的键值对的数量， <code class="docutils literal"><span class="pre">KEY-i</span></code> 和 <code class="docutils literal"><span class="pre">VALUE-i</span></code> 分别是哈希表的键和值。</p>
+<p>载入时，程序先创建一个新的哈希表，然后读入 <code class="docutils literal"><span class="pre">HASH-SIZE</span></code> ，再执行以下步骤 <code class="docutils literal"><span class="pre">HASH-SIZE</span></code> 次：</p>
+<ol class="arabic simple">
+<li>读入一个字符串</li>
+<li>再读入另一个字符串</li>
+<li>将第一个读入的字符串作为键，第二个读入的字符串作为值，插入到新建立的哈希中。</li>
+</ol>
+</li>
+<li><p class="first"><code class="docutils literal"><span class="pre">REDIS_LIST</span></code> 类型、 <code class="docutils literal"><span class="pre">REDIS_HASH</span></code> 类型和 <code class="docutils literal"><span class="pre">REDIS_ZSET</span></code> 类型都使用了 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 编码， <code class="docutils literal"><span class="pre">ziplist</span></code> 在 RDB 中的保存方式如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+-----+---------+</span>
+<span class="o">|</span> <span class="n">LEN</span> <span class="o">|</span> <span class="n">ZIPLIST</span> <span class="o">|</span>
+<span class="o">+-----+---------+</span>
+</pre></div>
+</div>
+<p>载入时，读入器先读入 <code class="docutils literal"><span class="pre">ziplist</span></code> 的字节长，再根据该字节长读入数据，最后将数据还原成一个 <code class="docutils literal"><span class="pre">ziplist</span></code> 。</p>
+</li>
+<li><p class="first"><code class="docutils literal"><span class="pre">REDIS_ENCODING_INTSET</span></code> 编码的 <code class="docutils literal"><span class="pre">REDIS_SET</span></code> 类型值保存为以下结构：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+-----+--------+</span>
+<span class="o">|</span> <span class="n">LEN</span> <span class="o">|</span> <span class="n">INTSET</span> <span class="o">|</span>
+<span class="o">+-----+--------+</span>
+</pre></div>
+</div>
+<p>载入时，读入器先读入 <code class="docutils literal"><span class="pre">intset</span></code> 的字节长度，再根据长度读入数据，最后将数据还原成 <code class="docutils literal"><span class="pre">intset</span></code> 。</p>
+</li>
+</ul>
+</div>
+<div class="section" id="eof">
+<h3>EOF<a class="headerlink" href="#eof" title="Permalink to this headline">¶</a></h3>
+<p>标志着数据库内容的结尾（不是文件的结尾），值为 <code class="docutils literal"><span class="pre">rdb.h/EDIS_RDB_OPCODE_EOF</span></code> （<code class="docutils literal"><span class="pre">255</span></code>）。</p>
+</div>
+<div class="section" id="check-sum">
+<h3>CHECK-SUM<a class="headerlink" href="#check-sum" title="Permalink to this headline">¶</a></h3>
+<p>RDB 文件所有内容的校验和，
+一个 <code class="docutils literal"><span class="pre">uint_64t</span></code> 类型值。</p>
+<p>REDIS 在写入 RDB 文件时将校验和保存在 RDB 文件的末尾，
+当读取时，
+根据它的值对内容进行校验。</p>
+<p>如果这个域的值为 <code class="docutils literal"><span class="pre">0</span></code> ，
+那么表示 Redis 关闭了校验和功能。</p>
+</div>
+</div>
+<div class="section" id="id5">
+<h2>小结<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<ul>
+<li><p class="first"><code class="docutils literal"><span class="pre">rdbSave</span></code> 会将数据库数据保存到 RDB 文件，并在保存完成之前阻塞调用者。</p>
+</li>
+<li><p class="first"><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 命令直接调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，阻塞 Redis 主进程； <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 用子进程调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，主进程仍可继续处理命令请求。</p>
+</li>
+<li><p class="first"><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 执行期间， AOF 写入可以在后台线程进行， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 可以在子进程进行，所以这三种操作可以同时进行。</p>
+</li>
+<li><p class="first">为了避免产生竞争条件， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 执行时， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 命令不能执行。</p>
+</li>
+<li><p class="first">为了避免性能问题， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 不能同时执行。</p>
+</li>
+<li><p class="first">调用 <code class="docutils literal"><span class="pre">rdbLoad</span></code> 函数载入 RDB 文件时，不能进行任何和数据库相关的操作，不过订阅与发布方面的命令可以正常执行，因为它们和数据库不相关联。</p>
+</li>
+<li><p class="first">RDB 文件的组织方式如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+-------+-------------+-----------+-----------------+-----+-----------+</span>
+<span class="o">|</span> <span class="n">REDIS</span> <span class="o">|</span> <span class="n">RDB</span><span class="o">-</span><span class="n">VERSION</span> <span class="o">|</span> <span class="n">SELECT</span><span class="o">-</span><span class="n">DB</span> <span class="o">|</span> <span class="n">KEY</span><span class="o">-</span><span class="n">VALUE</span><span class="o">-</span><span class="n">PAIRS</span> <span class="o">|</span> <span class="n">EOF</span> <span class="o">|</span> <span class="n">CHECK</span><span class="o">-</span><span class="n">SUM</span> <span class="o">|</span>
+<span class="o">+-------+-------------+-----------+-----------------+-----+-----------+</span>
+
+                      <span class="o">|&lt;--------</span> <span class="n">DB</span><span class="o">-</span><span class="n">DATA</span> <span class="o">----------&gt;|</span>
+</pre></div>
+</div>
+</li>
+<li><p class="first">键值对在 RDB 文件中的组织方式如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="o">+----------------------+---------------+-----+-------+</span>
+<span class="o">|</span> <span class="n">OPTIONAL</span><span class="o">-</span><span class="n">EXPIRE</span><span class="o">-</span><span class="n">TIME</span> <span class="o">|</span> <span class="n">TYPE</span><span class="o">-</span><span class="n">OF</span><span class="o">-</span><span class="n">VALUE</span> <span class="o">|</span> <span class="n">KEY</span> <span class="o">|</span> <span class="n">VALUE</span> <span class="o">|</span>
+<span class="o">+----------------------+---------------+-----+-------+</span>
+</pre></div>
+</div>
+<p>RDB 文件使用不同的格式来保存不同类型的值。</p>
+</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="aof.html" title="AOF"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="db.html" title="数据库"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

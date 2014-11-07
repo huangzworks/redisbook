@@ -1,0 +1,345 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>集合 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="有序集" href="sorted_set.html" />
+    <link rel="prev" title="列表" href="list.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="sorted_set.html" title="有序集"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="list.html" title="列表"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="set-chapter">
+<span id="id1"></span><h1>集合<a class="headerlink" href="#set-chapter" title="Permalink to this headline">¶</a></h1>
+<p><code class="docutils literal"><span class="pre">REDIS_SET</span></code> （集合）是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html#sadd" title="(in Redis 命令参考 v2.8)"><em>SADD</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/srandmember.html#srandmember" title="(in Redis 命令参考 v2.8)"><em>SRANDMEMBER</em></a> 等命令的操作对象，
+它使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_INTSET</span></code> 和 <code class="docutils literal"><span class="pre">REDIS_ENCODING_HT</span></code> 两种方式编码：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-2f54a5b62b3507f0e6d579358e426c78b0dfbd5c.svg" alt="digraph redis_set {
+    
+    node [shape=plaintext, style = filled];
+
+    edge [style = bold];
+
+    // type
+
+    REDIS_SET [label=&quot;集合\nREDIS_SET&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    // encoding
+
+    REDIS_ENCODING_INTSET [label=&quot;intset\nREDIS_ENCODING_INTSET&quot;, fillcolor = &quot;#FADCAD&quot;];
+    REDIS_ENCODING_HT [label=&quot;字典\nREDIS_ENCODING_HT&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    // edge
+
+    REDIS_SET -&gt; REDIS_ENCODING_INTSET;
+    REDIS_SET -&gt; REDIS_ENCODING_HT;
+
+    // datastruct 1
+
+    intset [label=&quot;intset.h/intset&quot;];
+
+    REDIS_ENCODING_INTSET -&gt; intset;
+
+    // datastruct 2
+
+    dict [label=&quot;dict.h/dict&quot;];
+    
+    REDIS_ENCODING_HT -&gt; dict;
+}" />
+</p>
+<div class="section" id="id2">
+<h2>编码的选择<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>第一个添加到集合的元素，
+决定了创建集合时所使用的编码：</p>
+<ul class="simple">
+<li>如果第一个元素可以表示为 <code class="docutils literal"><span class="pre">long</span> <span class="pre">long</span></code> 类型值（也即是，它是一个整数）， 那么集合的初始编码为 <code class="docutils literal"><span class="pre">REDIS_ENCODING_INTSET</span></code> 。</li>
+<li>否则，集合的初始编码为 <code class="docutils literal"><span class="pre">REDIS_ENCODING_HT</span></code> 。</li>
+</ul>
+</div>
+<div class="section" id="id3">
+<h2>编码的切换<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>如果一个集合使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_INTSET</span></code> 编码，
+那么当以下任何一个条件被满足时，
+这个集合会被转换成 <code class="docutils literal"><span class="pre">REDIS_ENCODING_HT</span></code> 编码：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">intset</span></code> 保存的整数值个数超过 <code class="docutils literal"><span class="pre">server.set_max_intset_entries</span></code> （默认值为 <code class="docutils literal"><span class="pre">512</span></code> ）。</li>
+<li>试图往集合里添加一个新元素，并且这个元素不能被表示为 <code class="docutils literal"><span class="pre">long</span> <span class="pre">long</span></code> 类型（也即是，它不是一个整数）。</li>
+</ul>
+</div>
+<div class="section" id="id4">
+<h2>字典编码的集合<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>当使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_HT</span></code> 编码时，
+集合将元素保存到字典的键里面，
+而字典的值则统一设为 <code class="docutils literal"><span class="pre">NULL</span></code> 。</p>
+<p>作为例子，
+以下图片展示了一个以 <code class="docutils literal"><span class="pre">REDIS_ENCODING_HT</span></code> 编码表示的集合，
+集合的成员为 <code class="docutils literal"><span class="pre">elem1</span></code> 、 <code class="docutils literal"><span class="pre">elem2</span></code> 和 <code class="docutils literal"><span class="pre">elem3</span></code> ：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-3b62c50ed475dc6c91adbb8079f0e0104f644931.svg" alt="digraph hash_table_example {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    ht1 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size:4 | sizemask:3 | used:3&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    bucket [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 &quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    pair_1 [label=&quot;&lt;head&gt;dictEntry |{&lt;key&gt;key\nelem1 |&lt;value&gt;value\nNULL |&lt;next&gt;next\nNULL}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_2 [label=&quot;&lt;head&gt;dictEntry |{&lt;key&gt;key\nelem2 |&lt;value&gt;value\nNULL |&lt;next&gt;next\nNULL}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_3 [label=&quot;&lt;head&gt;dictEntry |{&lt;key&gt;key\nelem3 |&lt;value&gt;value\nNULL |&lt;next&gt;next\nNULL}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    ht1:table -&gt; bucket:head;
+
+    bucket:table0 -&gt; pair_1:head;
+
+    bucket:table1 -&gt; null1;
+
+    bucket:table2 -&gt; pair_2:head;
+
+    bucket:table3 -&gt; pair_3:head;
+}" />
+</p>
+</div>
+<div class="section" id="id5">
+<h2>集合命令的实现<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>Redis 集合类型命令的实现，
+主要是对 <code class="docutils literal"><span class="pre">intset</span></code> 和 <code class="docutils literal"><span class="pre">dict</span></code> 两个数据结构的操作函数的包装，
+以及一些在两种编码之间进行转换的函数，
+大部分都没有什么需要解释的地方，
+唯一比较有趣的是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sinter.html#sinter" title="(in Redis 命令参考 v2.8)"><em>SINTER</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sunion.html#sunion" title="(in Redis 命令参考 v2.8)"><em>SUNION</em></a> 等命令之下的算法实现，
+以下三个小节就分别讨论它们所使用的算法。</p>
+</div>
+<div class="section" id="id6">
+<h2>求交集算法<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sinter.html#sinter" title="(in Redis 命令参考 v2.8)"><em>SINTER</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sinterstore.html#sinterstore" title="(in Redis 命令参考 v2.8)"><em>SINTERSTORE</em></a> 两个命令所使用的求并交集算法可以用 Python 表示如下：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="k">def</span> <span class="nf">sinter</span><span class="p">(</span><span class="o">*</span><span class="n">multi_set</span><span class="p">):</span>
+
+    <span class="c"># 根据集合的基数进行排序</span>
+    <span class="n">sorted_multi_set</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">multi_set</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">))</span>
+
+    <span class="c"># 使用基数最小的集合作为基础结果集，有助于降低常数项</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">sorted_multi_set</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c"># 剔除所有在 sorted_multi_set[0] 中存在</span>
+    <span class="c"># 但在其他某个集合中不存在的元素</span>
+    <span class="k">for</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">sorted_multi_set</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">sorted_multi_set</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+
+            <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">s</span><span class="p">):</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">elem</span><span class="p">)</span>
+                <span class="k">break</span>
+
+    <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+</div>
+<p>算法的复杂度为 <span class="math">\(O(N^2)\)</span> ，
+执行步数为 <span class="math">\(S * T\)</span> ，
+其中 <span class="math">\(S\)</span> 为输入集合中基数最小的集合，
+而 <span class="math">\(T\)</span> 则为输入集合的数量。</p>
+</div>
+<div class="section" id="id7">
+<h2>求并集算法<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sunion.html#sunion" title="(in Redis 命令参考 v2.8)"><em>SUNION</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sunionstore.html#sunionstore" title="(in Redis 命令参考 v2.8)"><em>SUNIONSTORE</em></a> 两个命令所使用的求并集算法可以用 Python 表示如下：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="k">def</span> <span class="nf">sunion</span><span class="p">(</span><span class="o">*</span><span class="n">multi_set</span><span class="p">):</span>
+
+    <span class="n">result</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">multi_set</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">s</span><span class="p">:</span>
+            <span class="c"># 重复的元素会被自动忽略</span>
+            <span class="n">result</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">elem</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+</div>
+<p>算法的复杂度为 <span class="math">\(O(N)\)</span> 。</p>
+</div>
+<div class="section" id="id8">
+<h2>求差集算法<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<p>Redis 为 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sdiff.html#sdiff" title="(in Redis 命令参考 v2.8)"><em>SDIFF</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sdiffstore.html#sdiffstore" title="(in Redis 命令参考 v2.8)"><em>SDIFFSTORE</em></a> 两个命令准备了两种求集合差的算法。</p>
+<p>以 Python 代码表示的算法一定义如下：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="k">def</span> <span class="nf">sdiff_1</span><span class="p">(</span><span class="o">*</span><span class="n">multi_set</span><span class="p">):</span>
+
+    <span class="n">result</span> <span class="o">=</span> <span class="n">multi_set</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="n">sorted_multi_set</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">multi_set</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">))</span>
+
+    <span class="c"># 当 elem 存在于除 multi_set[0] 之外的集合时</span>
+    <span class="c"># 将 elem 从 result 中删除</span>
+    <span class="k">for</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">multi_set</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+
+        <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">sorted_multi_set</span><span class="p">:</span>
+
+            <span class="k">if</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">s</span><span class="p">:</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">elem</span><span class="p">)</span>
+                <span class="k">break</span>
+
+    <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+</div>
+<p>这个算法的复杂度为 <span class="math">\(O(N^2)\)</span> ，
+执行步数为 <span class="math">\(S*T\)</span> ，
+其中 <span class="math">\(S\)</span> 为输入集合中基数最小的集合，
+而 <span class="math">\(T\)</span> 则为除第一个集合之外，
+其他集合的数量。</p>
+<p>以 Python 代码表示的算法二定于如下：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="k">def</span> <span class="nf">sdiff_2</span><span class="p">(</span><span class="o">*</span><span class="n">multi_set</span><span class="p">):</span>
+    <span class="c"># 用第一个集合作为结果集的起始值</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">multi_set</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">multi_set</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+        <span class="k">for</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">s</span><span class="p">:</span>
+            <span class="c"># 从结果集中删去其他集合中包含的元素</span>
+            <span class="k">if</span> <span class="n">elem</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+                <span class="n">result</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">elem</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+</div>
+<p>这个算法的复杂度同样为 <span class="math">\(O(N^2)\)</span> ，
+执行步数为 <span class="math">\(S\)</span> ，
+其中 <span class="math">\(S\)</span> 为所有集合的基数总和。</p>
+<p>Redis 使用一个程序决定该使用那个求差集算法，
+程序用 Python 表示如下：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
+
+<span class="kn">from</span> <span class="nn">sdiff_1</span> <span class="kn">import</span> <span class="n">sdiff_1</span>
+<span class="kn">from</span> <span class="nn">sdiff_2</span> <span class="kn">import</span> <span class="n">sdiff_2</span>
+
+<span class="k">def</span> <span class="nf">sdiff</span><span class="p">(</span><span class="o">*</span><span class="n">multi_set</span><span class="p">):</span>
+
+    <span class="c"># 算法一的常数项较低，给它一点额外的优先级</span>
+    <span class="n">algo_one_advantage</span> <span class="o">=</span> <span class="mi">2</span> 
+    <span class="n">algo_one_weight</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">multi_set</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">multi_set</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="o">/</span> <span class="n">algo_one_advantage</span>
+
+    <span class="n">algo_two_weight</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">len</span><span class="p">,</span> <span class="n">multi_set</span><span class="p">))</span>
+
+    <span class="k">if</span> <span class="n">algo_one_weight</span> <span class="o">&lt;=</span> <span class="n">algo_two_weight</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">sdiff_1</span><span class="p">(</span><span class="o">*</span><span class="n">multi_set</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">sdiff_2</span><span class="p">(</span><span class="o">*</span><span class="n">multi_set</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="sorted_set.html" title="有序集"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="list.html" title="列表"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

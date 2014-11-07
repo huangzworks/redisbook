@@ -1,0 +1,585 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>列表 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="集合" href="set.html" />
+    <link rel="prev" title="哈希表" href="hash.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="set.html" title="集合"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="hash.html" title="哈希表"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="list-chapter">
+<span id="id1"></span><h1>列表<a class="headerlink" href="#list-chapter" title="Permalink to this headline">¶</a></h1>
+<p><code class="docutils literal"><span class="pre">REDIS_LIST</span></code> （列表）是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><em>LPUSH</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lrange.html#lrange" title="(in Redis 命令参考 v2.8)"><em>LRANGE</em></a> 等命令的操作对象，
+它使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 和 <code class="docutils literal"><span class="pre">REDIS_ENCODING_LINKEDLIST</span></code> 这两种方式编码：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-9d1b937227cf948b8a9bfb3137570475e5407d2c.svg" alt="digraph redis_list {
+
+    node[shape=plaintext, style = filled];
+
+    edge [style = bold];
+
+    // type
+
+    REDIS_LIST [label=&quot;列表\nREDIS_LIST&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    // encoding
+
+    REDIS_ENCODING_ZIPLIST [label=&quot;压缩列表\nREDIS_ENCODING_ZIPLIST&quot;, fillcolor = &quot;#FADCAD&quot;];
+    REDIS_ENCODING_LINKEDLIST [label=&quot;双端链表\nREDIS_ENCODING_LINKEDLIST&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    // edge
+
+    REDIS_LIST -&gt; REDIS_ENCODING_LINKEDLIST;
+    REDIS_LIST -&gt; REDIS_ENCODING_ZIPLIST;
+
+    REDIS_ENCODING_LINKEDLIST -&gt; list;
+    REDIS_ENCODING_ZIPLIST -&gt; ziplist;
+
+    // datastruct 1
+    
+    list [label=&quot;adlist.h/list&quot;];
+
+    // datastruct 2
+
+    ziplist [label=&quot;ziplist&quot;];
+
+}" />
+</p>
+<div class="section" id="id2">
+<h2>编码的选择<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>创建新列表时 Redis 默认使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 编码，
+当以下任意一个条件被满足时，
+列表会被转换成 <code class="docutils literal"><span class="pre">REDIS_ENCODING_LINKEDLIST</span></code> 编码：</p>
+<ul class="simple">
+<li>试图往列表新添加一个字符串值，且这个字符串的长度超过 <code class="docutils literal"><span class="pre">server.list_max_ziplist_value</span></code> （默认值为 <code class="docutils literal"><span class="pre">64</span></code> ）。</li>
+<li><code class="docutils literal"><span class="pre">ziplist</span></code> 包含的节点超过 <code class="docutils literal"><span class="pre">server.list_max_ziplist_entries</span></code> （默认值为 <code class="docutils literal"><span class="pre">512</span></code> ）。</li>
+</ul>
+</div>
+<div class="section" id="id3">
+<h2>列表命令的实现<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
+<p>因为两种底层实现的抽象方式和列表的抽象方式非常接近，
+所以列表命令几乎就是通过一对一地映射到底层数据结构的操作来实现的。</p>
+<p>既然这些映射都非常直观，
+这里就不做赘述了，
+在以下的内容中，
+我们将焦点放在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><em>BLPOP</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpop.html#brpop" title="(in Redis 命令参考 v2.8)"><em>BRPOP</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpoplpush.html#brpoplpush" title="(in Redis 命令参考 v2.8)"><em>BRPOPLPUSH</em></a> 这个几个阻塞命令的实现原理上。</p>
+</div>
+<div class="section" id="id4">
+<h2>阻塞的条件<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><em>BLPOP</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpop.html#brpop" title="(in Redis 命令参考 v2.8)"><em>BRPOP</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpoplpush.html#brpoplpush" title="(in Redis 命令参考 v2.8)"><em>BRPOPLPUSH</em></a> 三个命令都可能造成客户端被阻塞，
+以下将这些命令统称为列表的阻塞原语。</p>
+<p>阻塞原语并不是一定会造成客户端阻塞：</p>
+<ul class="simple">
+<li>只有当这些命令被用于空列表时， 它们才会阻塞客户端。</li>
+<li>如果被处理的列表不为空的话， 它们就执行无阻塞版本的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpop.html#lpop" title="(in Redis 命令参考 v2.8)"><em>LPOP</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpop.html#rpop" title="(in Redis 命令参考 v2.8)"><em>RPOP</em></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpoplpush.html#rpoplpush" title="(in Redis 命令参考 v2.8)"><em>RPOPLPUSH</em></a> 命令。</li>
+</ul>
+<p>作为例子，以下流程图展示了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><em>BLPOP</em></a> 决定是否对客户端进行阻塞过程：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-657d8e78e1f1357fdff05173a259334670b87f85.svg" alt="digraph blpop_decide_block_or_not {
+
+    node [shape=plaintext, style = filled];
+
+    edge [style = bold];
+
+    //
+
+    call_blpop [label = &quot;BLPOP key&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    wrong_type_or_not [label = &quot;key 非空且不是列表？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    return_wrong_type [label = &quot;返回类型错误&quot;];
+
+    key_empty_or_not [label = &quot;key 是否为空?&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    block_client [label = &quot;阻塞客户端&quot;];
+
+    lpop [label = &quot;执行 LPOP key 命令&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    //
+
+    call_blpop -&gt; wrong_type_or_not;
+
+    wrong_type_or_not -&gt; return_wrong_type [label = &quot;是&quot;];
+
+    wrong_type_or_not -&gt; key_empty_or_not [label = &quot;否&quot;];
+
+    key_empty_or_not -&gt; block_client [label = &quot;是&quot;];
+
+    key_empty_or_not -&gt; lpop [label = &quot;否&quot;];
+
+}" />
+</p>
+</div>
+<div class="section" id="id5">
+<h2>阻塞<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
+<p>当一个阻塞原语的处理目标为空键时，
+执行该阻塞原语的客户端就会被阻塞。</p>
+<p>阻塞一个客户端需要执行以下步骤：</p>
+<ol class="arabic simple">
+<li>将客户端的状态设为“正在阻塞”，并记录阻塞这个客户端的各个键，以及阻塞的最长时限（timeout）等数据。</li>
+<li>将客户端的信息记录到 <code class="docutils literal"><span class="pre">server.db[i]-&gt;blocking_keys</span></code> 中（其中 <code class="docutils literal"><span class="pre">i</span></code> 为客户端所使用的数据库号码）。</li>
+<li>继续维持客户端和服务器之间的网络连接，但不再向客户端传送任何信息，造成客户端阻塞。</li>
+</ol>
+<p>步骤 2 是将来解除阻塞的关键，
+<code class="docutils literal"><span class="pre">server.db[i]-&gt;blocking_keys</span></code> 是一个字典，
+字典的键是那些造成客户端阻塞的键，
+而字典的值是一个链表，
+链表里保存了所有因为这个键而被阻塞的客户端
+（被同一个键所阻塞的客户端可能不止一个）：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-72233dd6a912518ff6874fdad4e20356091a6063.svg" alt="digraph db_blocking_keys {
+
+    rankdir = LR;
+
+    node [shape = record, style = filled];
+
+    edge [style = bold];
+
+    // keys
+
+    blocking_keys [label = &quot;blocking_keys |&lt;key1&gt; key1 |&lt;key2&gt; key2 |&lt;key3&gt; key3 | ... |&lt;keyN&gt; keyN&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    // clients blocking for key1
+    client1 [label = &quot;client1&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client5 [label = &quot;client5&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client2 [label = &quot;client2&quot;, fillcolor = &quot;#95BBE3&quot;];
+    null_1 [label = &quot;NULL&quot;, shape=plaintext];
+    
+    blocking_keys:key1 -&gt; client2;
+    client2 -&gt; client5;
+    client5 -&gt; client1;
+    client1 -&gt; null_1;
+
+    // clients blocking for key2
+    client7 [label = &quot;client7&quot;, fillcolor = &quot;#95BBE3&quot;];
+    null_2 [label = &quot;NULL&quot;, shape=plaintext];
+
+    blocking_keys:key2 -&gt; client7;
+    client7 -&gt; null_2;
+
+    // key3
+
+    client3 [label = &quot;client3&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client4 [label = &quot;client4&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client6 [label = &quot;client6&quot;, fillcolor = &quot;#95BBE3&quot;];
+    null_3 [label = &quot;NULL&quot;, shape=plaintext];
+
+    blocking_keys:key3 -&gt; client3;
+    client3 -&gt; client4;
+    client4 -&gt; client6;
+    client6 -&gt; null_3;
+}" />
+</p>
+<p>在上图展示的 <code class="docutils literal"><span class="pre">blocking_keys</span></code> 例子中， <code class="docutils literal"><span class="pre">client2</span></code> 、 <code class="docutils literal"><span class="pre">client5</span></code> 和 <code class="docutils literal"><span class="pre">client1</span></code> 三个客户端就正被 <code class="docutils literal"><span class="pre">key1</span></code> 阻塞，
+而其他几个客户端也正在被别的两个 key 阻塞。</p>
+<p>当客户端被阻塞之后，脱离阻塞状态有以下三种方法：</p>
+<ol class="arabic simple">
+<li>被动脱离：有其他客户端为造成阻塞的键推入了新元素。</li>
+<li>主动脱离：到达执行阻塞原语时设定的最大阻塞时间。</li>
+<li>强制脱离：客户端强制终止和服务器的连接，或者服务器停机。</li>
+</ol>
+<p>以下内容将分别介绍被动脱离和主动脱离的实现方式。</p>
+</div>
+<div class="section" id="lpush-rpush-linsert">
+<h2>阻塞因 LPUSH 、 RPUSH 、 LINSERT 等添加命令而被取消<a class="headerlink" href="#lpush-rpush-linsert" title="Permalink to this headline">¶</a></h2>
+<p>通过将新元素推入造成客户端阻塞的某个键中，
+可以让相应的客户端从阻塞状态中脱离出来
+（取消阻塞的客户端数量取决于推入元素的数量）。</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><em>LPUSH</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpush.html#rpush" title="(in Redis 命令参考 v2.8)"><em>RPUSH</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/linsert.html#linsert" title="(in Redis 命令参考 v2.8)"><em>LINSERT</em></a> 这三个添加新元素到列表的命令，
+在底层都由一个 <code class="docutils literal"><span class="pre">pushGenericCommand</span></code> 的函数实现，
+这个函数的运作流程如下图：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-be4975476661a3e683475377d30b659d70bee64c.svg" alt="digraph push_generic_command {
+    
+    node [shape = plaintext, style = filled];
+
+    edge [style = bold];
+
+    /*
+    lpush [label = &quot;LPUSH key value [value ...]&quot;];
+    rpush [label = &quot;RPUSH key value [value ...]&quot;];
+    linsert [label = &quot;LINSERT key BEFORE\|AFTER pivot value&quot;];
+    */
+
+    pushGenericCommand [label = &quot;pushGenericCommand&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    key_wrong_type_or_not [label = &quot;key 非空且不是列表？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    return_wrong_type_error [label = &quot;返回类型错误&quot;];
+
+    key_empty_or_not [label = &quot;key 为空？&quot;, shape = diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    // call_signal_list_as_ready [label = &quot;调用 signalListAsReady&quot;];
+
+    add_key_to_ready_list_if_need [label = &quot;如果 key 存在于 server.db[i]-\&gt;blocking_keys\n那么为 key 创建一个 readyList 结构\n并将它添加到 server.ready_keys 链表中&quot;];
+
+    push_value_to_list [label = &quot;将输入值推入列表&quot;];
+
+    /*
+    lpush -&gt; pushGenericCommand;
+    rpush -&gt; pushGenericCommand;
+    linsert -&gt; pushGenericCommand;
+    */
+
+    pushGenericCommand -&gt; key_wrong_type_or_not;
+
+    key_wrong_type_or_not -&gt; return_wrong_type_error [label = &quot;是&quot;];
+
+    key_wrong_type_or_not -&gt; key_empty_or_not [label = &quot;否&quot;];
+
+    // key_empty_or_not -&gt; call_signal_list_as_ready [label = &quot;是&quot;];
+
+    // call_signal_list_as_ready -&gt; add_key_to_ready_list_if_need;
+
+    key_empty_or_not -&gt; add_key_to_ready_list_if_need [label = &quot;是&quot;];
+
+    key_empty_or_not -&gt; push_value_to_list [label = &quot;否&quot;];
+    add_key_to_ready_list_if_need -&gt; push_value_to_list;
+}" />
+</p>
+<p>当向一个空键推入新元素时，
+<code class="docutils literal"><span class="pre">pushGenericCommand</span></code> 函数执行以下两件事：</p>
+<ol class="arabic simple">
+<li>检查这个键是否存在于前面提到的 <code class="docutils literal"><span class="pre">server.db[i]-&gt;blocking_keys</span></code> 字典里， 如果是的话， 那么说明有至少一个客户端因为这个 key 而被阻塞，程序会为这个键创建一个 <code class="docutils literal"><span class="pre">redis.h/readyList</span></code> 结构， 并将它添加到 <code class="docutils literal"><span class="pre">server.ready_keys</span></code> 链表中。</li>
+<li>将给定的值添加到列表键中。</li>
+</ol>
+<p><code class="docutils literal"><span class="pre">readyList</span></code> 结构的定义如下：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">readyList</span> <span class="p">{</span>
+    <span class="n">redisDb</span> <span class="o">*</span><span class="n">db</span><span class="p">;</span>
+    <span class="n">robj</span> <span class="o">*</span><span class="n">key</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">readyList</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">readyList</span></code> 结构的 <code class="docutils literal"><span class="pre">key</span></code> 属性指向造成阻塞的键，而 <code class="docutils literal"><span class="pre">db</span></code> 则指向该键所在的数据库。</p>
+<p>举个例子，
+假设某个非阻塞客户端正在使用 <code class="docutils literal"><span class="pre">0</span></code> 号数据库，
+而这个数据库当前的 <code class="docutils literal"><span class="pre">blocking_keys</span></code> 属性的值如下：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-72233dd6a912518ff6874fdad4e20356091a6063.svg" alt="digraph db_blocking_keys {
+
+    rankdir = LR;
+
+    node [shape = record, style = filled];
+
+    edge [style = bold];
+
+    // keys
+
+    blocking_keys [label = &quot;blocking_keys |&lt;key1&gt; key1 |&lt;key2&gt; key2 |&lt;key3&gt; key3 | ... |&lt;keyN&gt; keyN&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    // clients blocking for key1
+    client1 [label = &quot;client1&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client5 [label = &quot;client5&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client2 [label = &quot;client2&quot;, fillcolor = &quot;#95BBE3&quot;];
+    null_1 [label = &quot;NULL&quot;, shape=plaintext];
+    
+    blocking_keys:key1 -&gt; client2;
+    client2 -&gt; client5;
+    client5 -&gt; client1;
+    client1 -&gt; null_1;
+
+    // clients blocking for key2
+    client7 [label = &quot;client7&quot;, fillcolor = &quot;#95BBE3&quot;];
+    null_2 [label = &quot;NULL&quot;, shape=plaintext];
+
+    blocking_keys:key2 -&gt; client7;
+    client7 -&gt; null_2;
+
+    // key3
+
+    client3 [label = &quot;client3&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client4 [label = &quot;client4&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client6 [label = &quot;client6&quot;, fillcolor = &quot;#95BBE3&quot;];
+    null_3 [label = &quot;NULL&quot;, shape=plaintext];
+
+    blocking_keys:key3 -&gt; client3;
+    client3 -&gt; client4;
+    client4 -&gt; client6;
+    client6 -&gt; null_3;
+}" />
+</p>
+<p>如果这时客户端对该数据库执行 <code class="docutils literal"><span class="pre">PUSH</span> <span class="pre">key3</span> <span class="pre">value</span></code> ，
+那么 <code class="docutils literal"><span class="pre">pushGenericCommand</span></code> 将创建一个 <code class="docutils literal"><span class="pre">db</span></code> 属性指向 <code class="docutils literal"><span class="pre">0</span></code> 号数据库、
+<code class="docutils literal"><span class="pre">key</span></code> 属性指向 <code class="docutils literal"><span class="pre">key3</span></code> 键对象的 <code class="docutils literal"><span class="pre">readyList</span></code> 结构 ，
+并将它添加到服务器 <code class="docutils literal"><span class="pre">server.ready_keys</span></code> 属性的链表中：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-f2450c693b205a3c1cf1e82a4a09150c614ed631.svg" alt="digraph update_ready_keys {
+
+    rankdir = LR;
+
+    node [shape = record, style = filled];
+
+    edge [style = bold];
+
+    redisServer [label = &quot;redisServer | ... |&lt;ready_keys&gt; ready_keys | ...&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    readyList [label = &quot;&lt;head&gt;readyList |&lt;db&gt; db |&lt;key&gt; key&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    listNode [label = &quot;&lt;head&gt;listNode |{&lt;prev&gt; prev |&lt;next&gt; next |&lt;value&gt; value} &quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    null [label = &quot;NULL&quot;, shape = plaintext];
+
+    redisServer:ready_keys -&gt; listNode:head [label = &quot;list&quot;];
+    listNode:next -&gt; null;
+    listNode:prev -&gt; null;
+    listNode:value -&gt; readyList:head;
+    
+    redisDb [label = &quot;&lt;head&gt; redisDb | ... |&lt;dict&gt; dict | ...&quot;, fillcolor = &quot;#FFC1C1&quot;];
+    readyList:db -&gt; redisDb:head;
+
+    dict [label = &quot;&lt;head&gt;dict\n(key space of DB) | ... |&lt;key3&gt; key3 | ...&quot;, fillcolor = &quot;#F2F2F2&quot;];
+    redisDb:dict -&gt; dict:head;
+
+    readyList:key -&gt; dict:key3;
+}" />
+</p>
+<p>在我们这个例子中，
+到目前为止，
+<code class="docutils literal"><span class="pre">pushGenericCommand</span></code> 函数完成了以下两件事：</p>
+<ol class="arabic simple">
+<li>将 <code class="docutils literal"><span class="pre">readyList</span></code> 添加到服务器。</li>
+<li>将新元素 <code class="docutils literal"><span class="pre">value</span></code> 添加到键 <code class="docutils literal"><span class="pre">key3</span></code> 。</li>
+</ol>
+<p>虽然 <code class="docutils literal"><span class="pre">key3</span></code> 已经不再是空键，
+但到目前为止，
+被 <code class="docutils literal"><span class="pre">key3</span></code> 阻塞的客户端还没有任何一个被解除阻塞状态。</p>
+<p>为了做到这一点，
+Redis 的主进程在执行完 <code class="docutils literal"><span class="pre">pushGenericCommand</span></code> 函数之后，
+会继续调用 <code class="docutils literal"><span class="pre">handleClientsBlockedOnLists</span></code> 函数，
+这个函数执行以下操作：</p>
+<ol class="arabic simple">
+<li>如果 <code class="docutils literal"><span class="pre">server.ready_keys</span></code> 不为空，那么弹出该链表的表头元素，并取出元素中的 <code class="docutils literal"><span class="pre">readyList</span></code> 值。</li>
+<li>根据 <code class="docutils literal"><span class="pre">readyList</span></code> 值所保存的 <code class="docutils literal"><span class="pre">key</span></code> 和 <code class="docutils literal"><span class="pre">db</span></code> ，在 <code class="docutils literal"><span class="pre">server.blocking_keys</span></code> 中查找所有因为 <code class="docutils literal"><span class="pre">key</span></code> 而被阻塞的客户端（以链表的形式保存）。</li>
+<li>如果 <code class="docutils literal"><span class="pre">key</span></code> 不为空，那么从 <code class="docutils literal"><span class="pre">key</span></code> 中弹出一个元素，并弹出客户端链表的第一个客户端，然后将被弹出元素返回给被弹出客户端作为阻塞原语的返回值。</li>
+<li>根据 <code class="docutils literal"><span class="pre">readyList</span></code> 结构的属性，删除 <code class="docutils literal"><span class="pre">server.blocking_keys</span></code> 中相应的客户端数据，取消客户端的阻塞状态。</li>
+<li>继续执行步骤 3 和 4 ，直到 <code class="docutils literal"><span class="pre">key</span></code> 没有元素可弹出，或者所有因为 <code class="docutils literal"><span class="pre">key</span></code> 而阻塞的客户端都取消阻塞为止。</li>
+<li>继续执行步骤 1 ，直到 <code class="docutils literal"><span class="pre">ready_keys</span></code> 链表里的所有 <code class="docutils literal"><span class="pre">readyList</span></code> 结构都被处理完为止。</li>
+</ol>
+<p>用一段伪代码描述以上操作可能会更直观一些：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">handleClientsBlockedOnLists</span><span class="p">():</span>
+
+    <span class="c"># 执行直到 ready_keys 为空</span>
+    <span class="k">while</span> <span class="n">server</span><span class="o">.</span><span class="n">ready_keys</span> <span class="o">!=</span> <span class="n">NULL</span><span class="p">:</span>
+
+        <span class="c"># 弹出链表中的第一个 readyList</span>
+        <span class="n">rl</span> <span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">ready_keys</span><span class="o">.</span><span class="n">pop_first_node</span><span class="p">()</span>
+
+        <span class="c"># 遍历所有因为这个键而被阻塞的客户端</span>
+        <span class="k">for</span> <span class="n">client</span> <span class="ow">in</span> <span class="n">all_client_blocking_by_key</span><span class="p">(</span><span class="n">rl</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">rl</span><span class="o">.</span><span class="n">db</span><span class="p">):</span>
+
+            <span class="c"># 只要还有客户端被这个键阻塞，就一直从键中弹出元素</span>
+            <span class="c"># 如果被阻塞客户端执行的是 BLPOP ，那么对键执行 LPOP</span>
+            <span class="c"># 如果执行的是 BRPOP ，那么对键执行 RPOP</span>
+            <span class="n">element</span> <span class="o">=</span> <span class="n">rl</span><span class="o">.</span><span class="n">key</span><span class="o">.</span><span class="n">pop_element</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">element</span> <span class="o">==</span> <span class="n">NULL</span><span class="p">:</span>
+                <span class="c"># 键为空，跳出 for 循环</span>
+                <span class="c"># 余下的未解除阻塞的客户端只能等待下次新元素的进入了</span>
+                <span class="k">break</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c"># 清除客户端的阻塞信息</span>
+                <span class="n">server</span><span class="o">.</span><span class="n">blocking_keys</span><span class="o">.</span><span class="n">remove_blocking_info</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+                <span class="c"># 将元素返回给客户端，脱离阻塞状态</span>
+                <span class="n">client</span><span class="o">.</span><span class="n">reply_list_item</span><span class="p">(</span><span class="n">element</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="fbfs">
+<h2>先阻塞先服务（FBFS）策略<a class="headerlink" href="#fbfs" title="Permalink to this headline">¶</a></h2>
+<p>值得一提的是，
+当程序添加一个新的被阻塞客户端到 <code class="docutils literal"><span class="pre">server.blocking_keys</span></code> 字典的链表中时，
+它将该客户端放在链表的最后，
+而当 <code class="docutils literal"><span class="pre">handleClientsBlockedOnLists</span></code> 取消客户端的阻塞时，
+它从链表的最前面开始取消阻塞：
+这个链表形成了一个 FIFO 队列，
+最先被阻塞的客户端总是最先脱离阻塞状态，
+Redis 文档称这种模式为先阻塞先服务（FBFS，first-block-first-serve）。</p>
+<p>举个例子，在下图所示的阻塞状况中，
+如果客户端对数据库执行 <code class="docutils literal"><span class="pre">PUSH</span> <span class="pre">key3</span> <span class="pre">value</span></code> ，
+那么只有 <code class="docutils literal"><span class="pre">client3</span></code> 会被取消阻塞，
+<code class="docutils literal"><span class="pre">client6</span></code> 和 <code class="docutils literal"><span class="pre">client4</span></code> 仍然阻塞；
+如果客户端对数据库执行 <code class="docutils literal"><span class="pre">PUSH</span> <span class="pre">key3</span> <span class="pre">value1</span> <span class="pre">value2</span></code> ，
+那么 <code class="docutils literal"><span class="pre">client3</span></code> 和 <code class="docutils literal"><span class="pre">client4</span></code> 的阻塞都会被取消，
+而客户端 <code class="docutils literal"><span class="pre">client6</span></code> 依然处于阻塞状态：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-72233dd6a912518ff6874fdad4e20356091a6063.svg" alt="digraph db_blocking_keys {
+
+    rankdir = LR;
+
+    node [shape = record, style = filled];
+
+    edge [style = bold];
+
+    // keys
+
+    blocking_keys [label = &quot;blocking_keys |&lt;key1&gt; key1 |&lt;key2&gt; key2 |&lt;key3&gt; key3 | ... |&lt;keyN&gt; keyN&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    // clients blocking for key1
+    client1 [label = &quot;client1&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client5 [label = &quot;client5&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client2 [label = &quot;client2&quot;, fillcolor = &quot;#95BBE3&quot;];
+    null_1 [label = &quot;NULL&quot;, shape=plaintext];
+    
+    blocking_keys:key1 -&gt; client2;
+    client2 -&gt; client5;
+    client5 -&gt; client1;
+    client1 -&gt; null_1;
+
+    // clients blocking for key2
+    client7 [label = &quot;client7&quot;, fillcolor = &quot;#95BBE3&quot;];
+    null_2 [label = &quot;NULL&quot;, shape=plaintext];
+
+    blocking_keys:key2 -&gt; client7;
+    client7 -&gt; null_2;
+
+    // key3
+
+    client3 [label = &quot;client3&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client4 [label = &quot;client4&quot;, fillcolor = &quot;#95BBE3&quot;];
+    client6 [label = &quot;client6&quot;, fillcolor = &quot;#95BBE3&quot;];
+    null_3 [label = &quot;NULL&quot;, shape=plaintext];
+
+    blocking_keys:key3 -&gt; client3;
+    client3 -&gt; client4;
+    client4 -&gt; client6;
+    client6 -&gt; null_3;
+}" />
+</p>
+</div>
+<div class="section" id="id6">
+<h2>阻塞因超过最大等待时间而被取消<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
+<p>前面提到过，
+当客户端被阻塞时，
+所有造成它阻塞的键，
+以及阻塞的最长时限会被记录在客户端里面，
+并且该客户端的状态会被设置为“正在阻塞”。</p>
+<p>每次 Redis 服务器常规操作函数（server cron job）执行时，
+程序都会检查所有连接到服务器的客户端，
+查看那些处于“正在阻塞”状态的客户端的最大阻塞时限是否已经过期，
+如果是的话，
+就给客户端返回一个空白回复，
+然后撤销对客户端的阻塞。</p>
+<p>可以用一段伪代码来描述这个过程：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">server_cron_job</span><span class="p">():</span>
+
+    <span class="c"># 其他操作 ...</span>
+
+    <span class="c"># 遍历所有已连接客户端</span>
+    <span class="k">for</span> <span class="n">client</span> <span class="ow">in</span> <span class="n">server</span><span class="o">.</span><span class="n">all_connected_client</span><span class="p">:</span>
+
+        <span class="c"># 如果客户端状态为“正在阻塞”，并且最大阻塞时限已到达</span>
+        <span class="k">if</span> <span class="n">client</span><span class="o">.</span><span class="n">state</span> <span class="o">==</span> <span class="n">BLOCKING</span> <span class="ow">and</span> \
+           <span class="n">client</span><span class="o">.</span><span class="n">max_blocking_timestamp</span> <span class="o">&lt;</span> <span class="n">current_timestamp</span><span class="p">():</span>
+
+            <span class="c"># 那么给客户端发送空回复,脱离阻塞状态</span>
+            <span class="n">client</span><span class="o">.</span><span class="n">send_empty_reply</span><span class="p">()</span>
+
+            <span class="c"># 并清除客户端在服务器上的阻塞信息</span>
+            <span class="n">server</span><span class="o">.</span><span class="n">blocking_keys</span><span class="o">.</span><span class="n">remove_blocking_info</span><span class="p">(</span><span class="n">client</span><span class="p">)</span>
+
+    <span class="c"># 其他操作 ...</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="set.html" title="集合"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="hash.html" title="哈希表"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,1624 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>字典 &mdash; Redis 设计与实现</title>
+    
+    <link rel="stylesheet" href="../_static/pyramid.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="Redis 设计与实现" href="../index.html" />
+    <link rel="next" title="跳跃表" href="skiplist.html" />
+    <link rel="prev" title="双端链表" href="adlist.html" /> 
+
+<!--[if lte IE 6]>
+<link rel="stylesheet" href="../_static/ie6.css" type="text/css" media="screen" charset="utf-8" />
+<![endif]-->
+
+
+  </head>
+  <body>
+
+
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="skiplist.html" title="跳跃表"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="adlist.html" title="双端链表"
+             accesskey="P">previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="dict-chapter">
+<span id="id1"></span><h1>字典<a class="headerlink" href="#dict-chapter" title="Permalink to this headline">¶</a></h1>
+<p><a class="reference external" href="http://en.wikipedia.org/wiki/Associative_array">字典（dictionary），
+又名映射（map）或关联数组（associative array），</a>
+是一种抽象数据结构，
+由一集键值对（key-value pairs）组成，
+各个键值对的键各不相同，
+程序可以添加新的键值对到字典中，
+或者基于键进行查找、更新或删除等操作。</p>
+<p>本章先对字典在 Redis 中的应用进行介绍，
+接着讲解字典的具体实现方式，
+以及这个字典实现要解决的问题，
+最后，
+以对字典迭代器的介绍作为本章的结束。</p>
+<div class="section" id="id2">
+<h2>字典的应用<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
+<p>字典在 Redis 中的应用广泛，
+使用频率可以说和 SDS 以及双端链表不相上下，
+基本上各个功能模块都有用到字典的地方。</p>
+<p>其中，
+字典的主要用途有以下两个：</p>
+<ol class="arabic simple">
+<li>实现数据库键空间（key space）；</li>
+<li>用作 Hash 类型键的底层实现之一；</li>
+</ol>
+<p>以下两个小节分别介绍这两种用途。</p>
+<div class="section" id="id3">
+<h3>实现数据库键空间<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h3>
+<p>Redis 是一个键值对数据库，
+数据库中的键值对由字典保存：
+每个数据库都有一个对应的字典，
+这个字典被称之为键空间（key space）。</p>
+<p>当用户添加一个键值对到数据库时（不论键值对是什么类型），
+程序就将该键值对添加到键空间；
+当用户从数据库中删除键值对时，
+程序就会将这个键值对从键空间中删除；
+等等。</p>
+<p>举个例子，执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><em>FLUSHDB</em></a> 可以清空键空间里的所有键值对数据：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">FLUSHDB</span>
+<span class="n">OK</span>
+</pre></div>
+</div>
+<p>执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/dbsize.html#dbsize" title="(in Redis 命令参考 v2.8)"><em>DBSIZE</em></a> 则返回键空间里现有的键值对：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">DBSIZE</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>
+</pre></div>
+</div>
+<p>还可以用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 设置一个字符串键到键空间，
+并用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/get.html#get" title="(in Redis 命令参考 v2.8)"><em>GET</em></a> 从键空间中取出该字符串键的值：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">SET</span> <span class="n">number</span> <span class="mi">10086</span>
+<span class="n">OK</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">GET</span> <span class="n">number</span>
+<span class="s">&quot;10086&quot;</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">DBSIZE</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>
+</pre></div>
+</div>
+<p>后面的《<a class="reference internal" href="../internal/db.html#db-chapter"><em>数据库</em></a>》一章会对键空间以及数据库的实现作详细的介绍，
+届时将看到，
+大部分针对数据库的命令，
+比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/dbsize.html#dbsize" title="(in Redis 命令参考 v2.8)"><em>DBSIZE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><em>FLUSHDB</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/randomkey.html#randomkey" title="(in Redis 命令参考 v2.8)"><em>RANDOMKEY</em></a> ，
+等等，
+都是构建于对字典的操作之上的；
+而那些创建、更新、删除和查找键值对的命令，
+也无一例外地需要在键空间上进行操作。</p>
+</div>
+<div class="section" id="hash">
+<h3>用作 Hash 类型键的底层实现之一<a class="headerlink" href="#hash" title="Permalink to this headline">¶</a></h3>
+<p>Redis 的 Hash 类型键使用以下两种数据结构作为底层实现:</p>
+<ol class="arabic simple">
+<li>字典；</li>
+<li><a class="reference internal" href="../compress-datastruct/ziplist.html#ziplist-chapter"><em>压缩列表</em></a>；</li>
+</ol>
+<p>因为压缩列表比字典更节省内存，
+所以程序在创建新 Hash 键时，
+默认使用压缩列表作为底层实现，
+当有需要时，
+程序才会将底层实现从压缩列表转换到字典。</p>
+<p>当用户操作一个 Hash 键时，
+键值在底层就可能是一个哈希表：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">HSET</span> <span class="n">book</span> <span class="n">name</span> <span class="s">&quot;The design and implementation of Redis&quot;</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">HSET</span> <span class="n">book</span> <span class="n">type</span> <span class="s">&quot;source code analysis&quot;</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">HSET</span> <span class="n">book</span> <span class="n">release</span><span class="o">-</span><span class="n">date</span> <span class="s">&quot;2013.3.8&quot;</span>
+<span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>
+
+<span class="n">redis</span><span class="o">&gt;</span> <span class="n">HGETALL</span> <span class="n">book</span>
+<span class="mi">1</span><span class="p">)</span> <span class="s">&quot;name&quot;</span>
+<span class="mi">2</span><span class="p">)</span> <span class="s">&quot;The design and implementation of Redis&quot;</span>
+<span class="mi">3</span><span class="p">)</span> <span class="s">&quot;type&quot;</span>
+<span class="mi">4</span><span class="p">)</span> <span class="s">&quot;source code analysis&quot;</span>
+<span class="mi">5</span><span class="p">)</span> <span class="s">&quot;release-date&quot;</span>
+<span class="mi">6</span><span class="p">)</span> <span class="s">&quot;2013.3.8&quot;</span>
+</pre></div>
+</div>
+<p>《<a class="reference internal" href="../datatype/hash.html#hash-chapter"><em>哈希表</em></a>》章节给出了关于哈希类型键的更多信息，
+并介绍了压缩列表和字典之间的转换条件。</p>
+<p>介绍完了字典的用途，
+现在让我们来看看字典数据结构的定义。</p>
+</div>
+</div>
+<div class="section" id="id4">
+<h2>字典的实现<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
+<p>实现字典的方法有很多种：</p>
+<ul class="simple">
+<li>最简单的就是使用链表或数组，但是这种方式只适用于元素个数不多的情况下；</li>
+<li>要兼顾高效和简单性，可以使用哈希表；</li>
+<li>如果追求更为稳定的性能特征，并希望高效地实现排序操作的话，则可使用更为复杂的平衡树；</li>
+</ul>
+<p>在众多可能的实现中，
+Redis 选择了高效、实现简单的哈希表，作为字典的底层实现。</p>
+<p><code class="docutils literal"><span class="pre">dict.h/dict</span></code> 给出了这个字典的定义：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * 字典</span>
+<span class="cm"> *</span>
+<span class="cm"> * 每个字典使用两个哈希表，用于实现渐进式 rehash</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">dict</span> <span class="p">{</span>
+
+    <span class="c1">// 特定于类型的处理函数</span>
+    <span class="n">dictType</span> <span class="o">*</span><span class="n">type</span><span class="p">;</span>
+
+    <span class="c1">// 类型处理函数的私有数据</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">privdata</span><span class="p">;</span>
+
+    <span class="c1">// 哈希表（2 个）</span>
+    <span class="n">dictht</span> <span class="n">ht</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+
+    <span class="c1">// 记录 rehash 进度的标志，值为 -1 表示 rehash 未进行</span>
+    <span class="kt">int</span> <span class="n">rehashidx</span><span class="p">;</span>
+
+    <span class="c1">// 当前正在运作的安全迭代器数量</span>
+    <span class="kt">int</span> <span class="n">iterators</span><span class="p">;</span>
+
+<span class="p">}</span> <span class="n">dict</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>以下是用于处理 <code class="docutils literal"><span class="pre">dict</span></code> 类型的 API ，
+它们的作用及相应的算法复杂度：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="45%" />
+<col width="38%" />
+<col width="18%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">操作</th>
+<th class="head">函数</th>
+<th class="head">算法复杂度</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td>创建一个新字典</td>
+<td><code class="docutils literal"><span class="pre">dictCreate</span></code></td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td>添加新键值对到字典</td>
+<td><code class="docutils literal"><span class="pre">dictAdd</span></code></td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-even"><td>添加或更新给定键的值</td>
+<td><code class="docutils literal"><span class="pre">dictReplace</span></code></td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td>在字典中查找给定键所在的节点</td>
+<td><code class="docutils literal"><span class="pre">dictFind</span></code></td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-even"><td>在字典中查找给定键的值</td>
+<td><code class="docutils literal"><span class="pre">dictFetchValue</span></code></td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td>从字典中随机返回一个节点</td>
+<td><code class="docutils literal"><span class="pre">dictGetRandomKey</span></code></td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-even"><td>根据给定键，删除字典中的键值对</td>
+<td><code class="docutils literal"><span class="pre">dictDelete</span></code></td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td>清空并释放字典</td>
+<td><code class="docutils literal"><span class="pre">dictRelease</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td>清空并重置（但不释放）字典</td>
+<td><code class="docutils literal"><span class="pre">dictEmpty</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td>缩小字典</td>
+<td><code class="docutils literal"><span class="pre">dictResize</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td>扩大字典</td>
+<td><code class="docutils literal"><span class="pre">dictExpand</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-odd"><td>对字典进行给定步数的 rehash</td>
+<td><code class="docutils literal"><span class="pre">dictRehash</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+<tr class="row-even"><td>在给定毫秒内，对字典进行rehash</td>
+<td><code class="docutils literal"><span class="pre">dictRehashMilliseconds</span></code></td>
+<td><span class="math">\(O(N)\)</span></td>
+</tr>
+</tbody>
+</table>
+<p>注意 <code class="docutils literal"><span class="pre">dict</span></code> 类型使用了两个指针，分别指向两个哈希表。</p>
+<p>其中，
+0 号哈希表（<code class="docutils literal"><span class="pre">ht[0]</span></code>）是字典主要使用的哈希表，
+而 1 号哈希表（<code class="docutils literal"><span class="pre">ht[1]</span></code>）则只有在程序对 0 号哈希表进行 rehash 时才使用。</p>
+<p>接下来两个小节将对哈希表的实现，以及哈希表所使用的哈希算法进行介绍。</p>
+<div class="section" id="id5">
+<h3>哈希表实现<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h3>
+<p>字典所使用的哈希表实现由 <code class="docutils literal"><span class="pre">dict.h/dictht</span></code> 类型定义：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * 哈希表</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">dictht</span> <span class="p">{</span>
+
+    <span class="c1">// 哈希表节点指针数组（俗称桶，bucket）</span>
+    <span class="n">dictEntry</span> <span class="o">**</span><span class="n">table</span><span class="p">;</span>
+
+    <span class="c1">// 指针数组的大小</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">;</span>
+
+    <span class="c1">// 指针数组的长度掩码，用于计算索引值</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">sizemask</span><span class="p">;</span>
+
+    <span class="c1">// 哈希表现有的节点数量</span>
+    <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">used</span><span class="p">;</span>
+
+<span class="p">}</span> <span class="n">dictht</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">table</span></code> 属性是个数组，
+数组的每个元素都是个指向 <code class="docutils literal"><span class="pre">dictEntry</span></code> 结构的指针。</p>
+<p>每个 <code class="docutils literal"><span class="pre">dictEntry</span></code> 都保存着一个键值对，
+以及一个指向另一个 <code class="docutils literal"><span class="pre">dictEntry</span></code> 结构的指针：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * 哈希表节点</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">dictEntry</span> <span class="p">{</span>
+
+    <span class="c1">// 键</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">key</span><span class="p">;</span>
+
+    <span class="c1">// 值</span>
+    <span class="k">union</span> <span class="p">{</span>
+        <span class="kt">void</span> <span class="o">*</span><span class="n">val</span><span class="p">;</span>
+        <span class="kt">uint64_t</span> <span class="n">u64</span><span class="p">;</span>
+        <span class="kt">int64_t</span> <span class="n">s64</span><span class="p">;</span>
+    <span class="p">}</span> <span class="n">v</span><span class="p">;</span>
+
+    <span class="c1">// 链往后继节点</span>
+    <span class="k">struct</span> <span class="n">dictEntry</span> <span class="o">*</span><span class="n">next</span><span class="p">;</span>
+
+<span class="p">}</span> <span class="n">dictEntry</span><span class="p">;</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">next</span></code> 属性指向另一个 <code class="docutils literal"><span class="pre">dictEntry</span></code> 结构，
+多个 <code class="docutils literal"><span class="pre">dictEntry</span></code> 可以通过 <code class="docutils literal"><span class="pre">next</span></code> 指针串连成链表，
+从这里可以看出，
+<code class="docutils literal"><span class="pre">dictht</span></code> <a class="reference external" href="http://en.wikipedia.org/wiki/Hash_table#Separate_chaining">使用链地址法来处理键碰撞</a>：
+当多个不同的键拥有相同的哈希值时，哈希表用一个链表将这些键连接起来。</p>
+<p>下图展示了一个由 <code class="docutils literal"><span class="pre">dictht</span></code> 和数个 <code class="docutils literal"><span class="pre">dictEntry</span></code> 组成的哈希表例子：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-c720caba6b4d02c54fe310c148f0d56316ee80a2.svg" alt="digraph hash_table_example {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape = record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    ht1 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 4 | sizemask: 3 | used: 3&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    bucket [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 &quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    pair_1 [label=&quot;&lt;head&gt;dictEntry |{key1 | value1 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_2 [label=&quot;&lt;head&gt;dictEntry |{key2 | value2 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_3 [label=&quot;&lt;head&gt;dictEntry |{key3 | value3 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+    null2 [label=&quot;NULL&quot;, shape=plaintext];
+    null3 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    ht1:table -&gt; bucket:head;
+
+    bucket:table0 -&gt; pair_1:head; pair_1:next -&gt; null0;
+
+    bucket:table1 -&gt; null1;
+
+    bucket:table2 -&gt; pair_2:head; pair_2:next -&gt; null2;
+
+    bucket:table3 -&gt; pair_3:head; pair_3:next -&gt; null3;
+}" />
+</p>
+<p>如果再加上之前列出的 <code class="docutils literal"><span class="pre">dict</span></code> 类型，那么整个字典结构可以表示如下：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-6989792733a041b23cdc0b8f126434590c50a4e4.svg" alt="digraph hash_table_example {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    dict [label=&quot;dict | type | privdata |&lt;ht&gt; ht[2] | rehashidx: -1 | iterators: 0&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    ht0 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 4 | sizemask: 3 | used: 3&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    ht1 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 0 | sizemask: 0 | used: 0&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    bucket [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 &quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    pair_1 [label=&quot;&lt;head&gt;dictEntry |{key1 | value1 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_2 [label=&quot;&lt;head&gt;dictEntry |{key2 | value2 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_3 [label=&quot;&lt;head&gt;dictEntry |{key3 | value3 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+    null2 [label=&quot;NULL&quot;, shape=plaintext];
+    null3 [label=&quot;NULL&quot;, shape=plaintext];
+
+    tnull1 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    dict:ht -&gt; ht0:dictht [label=&quot;ht[0]&quot;];
+    dict:ht -&gt; ht1:dictht [label=&quot;ht[1]&quot;];
+
+    ht0:table -&gt; bucket:head;
+
+    ht1:table -&gt; tnull1;
+
+    bucket:table0 -&gt; pair_1:head; pair_1:next -&gt; null0;
+
+    bucket:table1 -&gt; null1;
+
+    bucket:table2 -&gt; pair_2:head; pair_2:next -&gt; null2;
+
+    bucket:table3 -&gt; pair_3:head; pair_3:next -&gt; null3;
+}" />
+</p>
+<p>在上图的字典示例中，
+字典虽然创建了两个哈希表，
+但正在使用的只有 0 号哈希表，
+这说明字典未进行 rehash 状态。</p>
+</div>
+<div class="section" id="id7">
+<h3>哈希算法<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h3>
+<p>Redis 目前使用两种不同的哈希算法：</p>
+<ol class="arabic simple">
+<li>MurmurHash2 32 bit 算法：这种算法的分布率和速度都非常好， 具体信息请参考 MurmurHash 的主页： <a class="reference external" href="http://code.google.com/p/smhasher/">http://code.google.com/p/smhasher/</a> 。</li>
+<li>基于 djb 算法实现的一个大小写无关散列算法：具体信息请参考 <a class="reference external" href="http://www.cse.yorku.ca/~oz/hash.html">http://www.cse.yorku.ca/~oz/hash.html</a> 。</li>
+</ol>
+<p>使用哪种算法取决于具体应用所处理的数据：</p>
+<ul class="simple">
+<li>命令表以及 Lua 脚本缓存都用到了算法 2 。</li>
+<li>算法 1 的应用则更加广泛：数据库、集群、哈希键、阻塞操作等功能都用到了这个算法。</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id8">
+<h2>创建新字典<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
+<p><code class="docutils literal"><span class="pre">dictCreate</span></code> 函数创建并返回一个新字典：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="n">dict</span> <span class="o">*</span><span class="n">d</span> <span class="o">=</span> <span class="n">dictCreate</span><span class="p">(</span><span class="o">&amp;</span><span class="n">hash_type</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</pre></div>
+</div>
+<p><code class="docutils literal"><span class="pre">d</span></code> 的值可以用图片表示如下：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-ce90f2a0f396c0ab66b48c0eb83f18fa8f4754f0.svg" alt="digraph empty_dict {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape = record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    dict [label=&quot;dict | type | privdata |&lt;ht&gt; ht[2] | rehashidx | iterators&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    ht0 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 0 | sizemask: 0 | used: 0&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    ht1 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 0 | sizemask: 0 | used: 0&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    dict:ht -&gt; ht0:dictht [label=&quot;ht[0]&quot;];
+    dict:ht -&gt; ht1:dictht [label=&quot;ht[1]&quot;];
+
+    ht0:table -&gt; null0;
+    ht1:table -&gt; null1;
+}" />
+</p>
+<p>新创建的两个哈希表都没有为 <code class="docutils literal"><span class="pre">table</span></code> 属性分配任何空间：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">ht[0]-&gt;table</span></code> 的空间分配将在第一次往字典添加键值对时进行；</li>
+<li><code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> 的空间分配将在 rehash 开始时进行；</li>
+</ul>
+</div>
+<div class="section" id="id9">
+<h2>添加键值对到字典<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
+<p>根据字典所处的状态，
+将给定的键值对添加到字典可能会引起一系列复杂的操作：</p>
+<ul class="simple">
+<li>如果字典为未初始化（即字典的 0 号哈希表的 <code class="docutils literal"><span class="pre">table</span></code> 属性为空），则程序需要对 0 号哈希表进行初始化；</li>
+<li>如果在插入时发生了键碰撞，则程序需要处理碰撞；</li>
+<li>如果插入新元素，使得字典满足了 rehash 条件，则需要启动相应的 rehash 程序；</li>
+</ul>
+<p>当程序处理完以上三种情况之后，新的键值对才会被真正地添加到字典上。</p>
+<p>整个添加流程可以用下图表示：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-68f4129c529e0c49d38cfe664cad48af4412770a.svg" alt="digraph dictAdd {
+
+    node[shape=plaintext, style = filled];
+
+    edge [style = bold];
+
+    //
+
+    start [label=&quot;dictAdd&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    key_exists_or_not [label=&quot;键已经存在？&quot;, shape=diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    start -&gt; key_exists_or_not;
+
+    return_null_if_key_exists [label=&quot;返回 NULL ，\n表示添加失败&quot;];
+
+    key_exists_or_not -&gt; return_null_if_key_exists [label=&quot;是&quot;];
+
+    dict_empty_or_not [label=&quot;ht[0]\n 未分配任何空间？&quot;, shape=diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    key_exists_or_not -&gt; dict_empty_or_not [label=&quot;否&quot;];
+
+    init_hash_table_one [label=&quot;初始化 ht[0]&quot;];
+
+    dict_empty_or_not -&gt; init_hash_table_one [label=&quot;是&quot;];
+
+    init_hash_table_one -&gt; need_rehash_or_not;
+
+    need_rehash_or_not [label=&quot;需要 rehash ？&quot;, shape=diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    dict_empty_or_not -&gt; need_rehash_or_not [label=&quot;否&quot;];
+
+    begin_incremental_rehash [label=&quot;开始渐进式 rehash &quot;];
+
+    need_rehash_or_not -&gt; begin_incremental_rehash [label=&quot;需要，\n并且 rehash 未进行&quot;];
+
+    begin_incremental_rehash -&gt; rehashing_or_not;
+
+    rehashing_or_not [label=&quot;rehash\n 正在进行中？&quot;, shape=diamond, fillcolor = &quot;#95BBE3&quot;];
+
+    need_rehash_or_not -&gt; rehashing_or_not [label=&quot;不需要，\n或者 rehash 正在进行&quot;];
+
+    is_rehashing [label=&quot;选择 ht[1] 作为新键值对的添加目标&quot;];
+
+    not_rehashing [label=&quot;选择 ht[0] 作为新键值对的添加目标&quot;];
+
+    rehashing_or_not -&gt; is_rehashing [label=&quot;是&quot;];
+
+    rehashing_or_not -&gt; not_rehashing [label=&quot;否&quot;];
+
+    calc_hash_code_and_index_by_key [label=&quot;根据给定键，计算出哈希值，以及索引值&quot;];
+
+    is_rehashing -&gt; calc_hash_code_and_index_by_key;
+    not_rehashing -&gt; calc_hash_code_and_index_by_key;
+
+    create_entry_and_assoc_key_and_value [label=&quot;创建新 dictEntry ，并保存给定键值对&quot;];
+
+    calc_hash_code_and_index_by_key -&gt; create_entry_and_assoc_key_and_value;
+
+    add_entry_to_hashtable [label=&quot;根据索引值，将新节点添加到目标哈希表&quot;];
+    
+    create_entry_and_assoc_key_and_value -&gt; add_entry_to_hashtable;
+
+}" />
+</p>
+<p>在接下来的三节中，
+我们将分别看到，添加操作如何在以下三种情况中执行：</p>
+<ol class="arabic simple">
+<li>字典为空；</li>
+<li>添加新键值对时发生碰撞处理；</li>
+<li>添加新键值对时触发了 rehash 操作；</li>
+</ol>
+</div>
+<div class="section" id="add-when-empty">
+<span id="id10"></span><h2>添加新元素到空白字典<a class="headerlink" href="#add-when-empty" title="Permalink to this headline">¶</a></h2>
+<p>当第一次往空字典里添加键值对时，
+程序会根据 <code class="docutils literal"><span class="pre">dict.h/DICT_HT_INITIAL_SIZE</span></code> 里指定的大小为
+<code class="docutils literal"><span class="pre">d-&gt;ht[0]-&gt;table</span></code> 分配空间
+（在目前的版本中， <code class="docutils literal"><span class="pre">DICT_HT_INITIAL_SIZE</span></code> 的值为 <code class="docutils literal"><span class="pre">4</span></code> ）。</p>
+<p>以下是字典空白时的样子：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-ce90f2a0f396c0ab66b48c0eb83f18fa8f4754f0.svg" alt="digraph empty_dict {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape = record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    dict [label=&quot;dict | type | privdata |&lt;ht&gt; ht[2] | rehashidx | iterators&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    ht0 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 0 | sizemask: 0 | used: 0&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    ht1 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 0 | sizemask: 0 | used: 0&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    dict:ht -&gt; ht0:dictht [label=&quot;ht[0]&quot;];
+    dict:ht -&gt; ht1:dictht [label=&quot;ht[1]&quot;];
+
+    ht0:table -&gt; null0;
+    ht1:table -&gt; null1;
+}" />
+</p>
+<p>以下是往空白字典添加了第一个键值对之后的样子：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-5db645431193228424095abdcf1a3270c9da385e.svg" alt="digraph add_first_entry_to_empty_dict {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    dict [label=&quot;dict | type | privdata |&lt;ht&gt; ht[2] | rehashidx | iterators&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    ht0 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 4 | sizemask: 3 | used: 1&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    ht1 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 0 | sizemask: 0 | used: 0&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 &quot;fillcolor = &quot;#F2F2F2&quot;];
+
+    entry [label=&quot;&lt;head&gt;dictEntry |{&lt;start&gt;key1 | value1 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    // lines
+
+    dict:ht -&gt; ht0:dictht [label=&quot;ht[0]&quot;];
+    dict:ht -&gt; ht1:dictht [label=&quot;ht[1]&quot;];
+
+    ht0:table -&gt; bucket:head; bucket:table1 -&gt; entry:head; entry:next -&gt; null0;
+
+    ht1:table -&gt; null1;
+
+    // table nulls
+
+    tnull0 [label=&quot;NULL&quot;, shape=plaintext];
+    tnull2 [label=&quot;NULL&quot;, shape=plaintext];
+    tnull3 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket:table0 -&gt; tnull0;
+    bucket:table2 -&gt; tnull2;
+    bucket:table3 -&gt; tnull3;
+}" />
+</p>
+</div>
+<div class="section" id="id11">
+<h2>添加新键值对时发生碰撞处理<a class="headerlink" href="#id11" title="Permalink to this headline">¶</a></h2>
+<p>在哈希表实现中，
+当两个不同的键拥有相同的哈希值时，
+称这两个键发生碰撞（collision），
+而哈希表实现必须想办法对碰撞进行处理。</p>
+<p>字典哈希表所使用的碰撞解决方法被称之为<a class="reference external" href="http://en.wikipedia.org/wiki/Hash_table#Separate_chaining">链地址法</a>：
+这种方法使用链表将多个哈希值相同的节点串连在一起，
+从而解决冲突问题。</p>
+<p>假设现在有一个带有三个节点的哈希表，如下图：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-551247f8f670dc6b0eb2dbd6406aee607068249c.svg" alt="digraph before_key_collision {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    bucket [label=&quot;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 &quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    pair_1 [label=&quot;&lt;head&gt;dictEntry |{key1 | value1 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_2 [label=&quot;&lt;head&gt;dictEntry |{key2 | value2 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_3 [label=&quot;&lt;head&gt;dictEntry |{key3 | value3 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+    null2 [label=&quot;NULL&quot;, shape=plaintext];
+    null3 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    bucket:table0 -&gt; pair_1:head; pair_1:next -&gt; null0;
+
+    bucket:table1 -&gt; null1;
+
+    bucket:table2 -&gt; pair_2:head; pair_2:next -&gt; null2;
+
+    bucket:table3 -&gt; pair_3:head; pair_3:next -&gt; null3;
+
+    // label
+
+    label = &quot;添加碰撞节点之前&quot;;
+}" />
+</p>
+<p>对于一个新的键值对 <code class="docutils literal"><span class="pre">key4</span></code> 和 <code class="docutils literal"><span class="pre">value4</span></code> ，
+如果 <code class="docutils literal"><span class="pre">key4</span></code> 的哈希值和 <code class="docutils literal"><span class="pre">key1</span></code> 的哈希值相同，
+那么它们将在哈希表的 <code class="docutils literal"><span class="pre">0</span></code> 号索引上发生碰撞。</p>
+<p>通过将 <code class="docutils literal"><span class="pre">key4-value4</span></code> 和 <code class="docutils literal"><span class="pre">key1-value1</span></code> 两个键值对用链表连接起来，
+就可以解决碰撞的问题：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-f351812afbaf4b7c29731b38d17dc4a24f902069.svg" alt="digraph after_key_collision {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+
+    // nodes
+
+    bucket [label=&quot;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 &quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    pair_1 [label=&quot;&lt;head&gt;dictEntry |{key1 | value1 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_2 [label=&quot;&lt;head&gt;dictEntry |{key2 | value2 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_3 [label=&quot;&lt;head&gt;dictEntry |{key3 | value3 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_4 [label=&quot;&lt;head&gt;dictEntry |{key4 | value4 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+    null2 [label=&quot;NULL&quot;, shape=plaintext];
+    null3 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    bucket:table0 -&gt; pair_4:head; pair_4:next -&gt; pair_1:head; pair_1:next -&gt; null0;
+
+    bucket:table1 -&gt; null1;
+
+    bucket:table2 -&gt; pair_2:head; pair_2:next -&gt; null2;
+
+    bucket:table3 -&gt; pair_3:head; pair_3:next -&gt; null3;
+
+    // label
+
+    label = &quot;添加碰撞节点之后&quot;;
+}" />
+</p>
+</div>
+<div class="section" id="rehash">
+<h2>添加新键值对时触发了 rehash 操作<a class="headerlink" href="#rehash" title="Permalink to this headline">¶</a></h2>
+<p>对于使用链地址法来解决碰撞问题的哈希表 <code class="docutils literal"><span class="pre">dictht</span></code> 来说，
+哈希表的性能取决于大小（<code class="docutils literal"><span class="pre">size</span></code>属性）与保存节点数量（<code class="docutils literal"><span class="pre">used</span></code>属性）之间的比率：</p>
+<ul class="simple">
+<li>哈希表的大小与节点数量，比率在 1:1 时，哈希表的性能最好；</li>
+<li>如果节点数量比哈希表的大小要大很多的话，那么哈希表就会退化成多个链表，哈希表本身的性能优势便不复存在；</li>
+</ul>
+<p>举个例子，
+下面这个哈希表，
+平均每次失败查找只需要访问 1 个节点（非空节点访问 2 次，空节点访问 1 次）：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-ff857f0c77749cd0213041b561bac0a6348f78e5.svg" alt="digraph good_performance_hash {
+
+    rankdir = LR;
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // bucket
+
+    bucket [label=&quot;bucket |&lt;0&gt; 0 |&lt;1&gt; 1 |&lt;2&gt; 2 |&lt;3&gt; 3 |&lt;4&gt; 4 |&lt;5&gt; 5 |&lt;6&gt; 6 |&lt;7&gt; 7&quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    // nodes
+
+    node [height=.1];
+
+    node0 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node0_null [label=&quot;NULL&quot;, shape=plaintext];
+    node1 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node1_null [label=&quot;NULL&quot;, shape=plaintext];
+    node2 [label=&quot;NULL&quot;, shape=plaintext];
+    node3 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node3_null [label=&quot;NULL&quot;, shape=plaintext];
+    node4 [label=&quot;NULL&quot;, shape=plaintext];
+    node5 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node5_null [label=&quot;NULL&quot;, shape=plaintext];
+    node6 [label=&quot;NULL&quot;, shape=plaintext];
+    node7 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket:0 -&gt; node0; node0 -&gt; node0_null;
+    bucket:1 -&gt; node1; node1 -&gt; node1_null;
+    bucket:2 -&gt; node2;
+    bucket:3 -&gt; node3; node3 -&gt; node3_null;
+    bucket:4 -&gt; node4;
+    bucket:5 -&gt; node5; node5 -&gt; node5_null;
+    bucket:6 -&gt; node6;
+    bucket:7 -&gt; node7;
+}" />
+</p>
+<p>而下面这个哈希表，
+平均每次失败查找需要访问 5 个节点：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-cbec5e98bba611d3021b57f5417b93538328af42.svg" alt="digraph bad_performance_hash {
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // bucket
+
+    bucket [label=&quot;bucket |&lt;0&gt; 0 |&lt;1&gt; 1 |&lt;2&gt; 2 |&lt;3&gt; 3 |&lt;4&gt; 4 |&lt;5&gt; 5 |&lt;6&gt; 6 |&lt;7&gt; 7&quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    // nodes
+
+    node [height=.1];
+
+    // node 0
+    node0 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node01 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node02 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node03 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node04 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node05 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket:0 -&gt; node0;
+    node0 -&gt; node01;
+    node01 -&gt; node02;
+    node02 -&gt; node03;
+    node03 -&gt; node04;
+    node04 -&gt; node05;
+
+    // node 1
+    node1 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node11 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node12 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node13 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket:1 -&gt; node1;
+    node1 -&gt; node11;
+    node11 -&gt; node12;
+    node12 -&gt; node13;
+
+    // node 2
+    node2 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node21 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node22 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node23 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node24 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node25 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket:2 -&gt; node2;
+    node2 -&gt; node21;
+    node21 -&gt; node22;
+    node22 -&gt; node23;
+    node23 -&gt; node24;
+    node24 -&gt; node25;
+
+    // node 3
+    node3 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node31 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node32 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node33 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node34 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node35 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket:3 -&gt; node3;
+    node3 -&gt; node31;
+    node31 -&gt; node32;
+    node32 -&gt; node33;
+    node33 -&gt; node34;
+    node34 -&gt; node35;
+
+    // node 4
+    node4 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node41 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node42 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket:4 -&gt; node4;
+    node4 -&gt; node41;
+    node41 -&gt; node42;
+
+    // node 5
+    node5 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node51 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node52 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node53 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node54 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node55 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket:5 -&gt; node5;
+    node5 -&gt; node51;
+    node51 -&gt; node52;
+    node52 -&gt; node53;
+    node53 -&gt; node54;
+    node54 -&gt; node55;
+
+    // node 6
+    node6 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node61 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node62 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node63 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node64 [label=&quot;NULL&quot;, shape=plaintext];
+
+
+    bucket:6 -&gt; node6;
+    node6 -&gt; node61;
+    node61 -&gt; node62;
+    node62 -&gt; node63;
+    node63 -&gt; node64;
+
+    // node 7
+    node7 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node71 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node72 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node73 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node74 [label=&quot;Entry&quot;, fillcolor = &quot;#FADCAD&quot;];
+    node75 [label=&quot;NULL&quot;, shape=plaintext];
+
+    bucket:7 -&gt; node7;
+    node7 -&gt; node71;
+    node71 -&gt; node72;
+    node72 -&gt; node73;
+    node73 -&gt; node74;
+    node74 -&gt; node75;
+
+}" />
+</p>
+<p>为了在字典的键值对不断增多的情况下保持良好的性能，
+字典需要对所使用的哈希表（<code class="docutils literal"><span class="pre">ht[0]</span></code>）进行 rehash 操作：
+在不修改任何键值对的情况下，对哈希表进行扩容，
+尽量将比率维持在 1:1 左右。</p>
+<p><code class="docutils literal"><span class="pre">dictAdd</span></code> 在每次向字典添加新键值对之前， 都会对哈希表 <code class="docutils literal"><span class="pre">ht[0]</span></code> 进行检查，
+对于 <code class="docutils literal"><span class="pre">ht[0]</span></code> 的 <code class="docutils literal"><span class="pre">size</span></code> 和 <code class="docutils literal"><span class="pre">used</span></code> 属性，
+如果它们之间的比率 <code class="docutils literal"><span class="pre">ratio</span> <span class="pre">=</span> <span class="pre">used</span> <span class="pre">/</span> <span class="pre">size</span></code> 满足以下任何一个条件的话，rehash 过程就会被激活：</p>
+<ol class="arabic simple">
+<li>自然 rehash ： <code class="docutils literal"><span class="pre">ratio</span> <span class="pre">&gt;=</span> <span class="pre">1</span></code> ，且变量 <code class="docutils literal"><span class="pre">dict_can_resize</span></code> 为真。</li>
+<li>强制 rehash ： <code class="docutils literal"><span class="pre">ratio</span></code> 大于变量 <code class="docutils literal"><span class="pre">dict_force_resize_ratio</span></code> （目前版本中， <code class="docutils literal"><span class="pre">dict_force_resize_ratio</span></code> 的值为 <code class="docutils literal"><span class="pre">5</span></code> ）。</li>
+</ol>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p>什么时候 <code class="docutils literal"><span class="pre">dict_can_resize</span></code> 会为假？</p>
+<p>在前面介绍字典的应用时也说到过，
+数据库就是字典，
+数据库里的哈希类型键也是字典，
+当 Redis 使用子进程对数据库执行后台持久化任务时（比如执行 <code class="docutils literal"><span class="pre">BGSAVE</span></code> 或 <code class="docutils literal"><span class="pre">BGREWRITEAOF</span></code> 时），
+为了最大化地利用系统的 <a class="reference external" href="http://en.wikipedia.org/wiki/Copy-on-write">copy on write</a> 机制，
+程序会暂时将 <code class="docutils literal"><span class="pre">dict_can_resize</span></code> 设为假，
+避免执行自然 rehash ，
+从而减少程序对内存的触碰（touch）。</p>
+<p>当持久化任务完成之后，
+<code class="docutils literal"><span class="pre">dict_can_resize</span></code> 会重新被设为真。</p>
+<p class="last">另一方面，
+当字典满足了强制 rehash 的条件时，
+即使 <code class="docutils literal"><span class="pre">dict_can_resize</span></code> 不为真（有 <code class="docutils literal"><span class="pre">BGSAVE</span></code> 或 <code class="docutils literal"><span class="pre">BGREWRITEAOF</span></code> 正在执行），
+这个字典一样会被 rehash 。</p>
+</div>
+</div>
+<div class="section" id="id13">
+<h2>Rehash 执行过程<a class="headerlink" href="#id13" title="Permalink to this headline">¶</a></h2>
+<p>字典的 rehash 操作实际上就是执行以下任务：</p>
+<ol class="arabic simple">
+<li>创建一个比 <code class="docutils literal"><span class="pre">ht[0]-&gt;table</span></code> 更大的 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> ；</li>
+<li>将 <code class="docutils literal"><span class="pre">ht[0]-&gt;table</span></code> 中的所有键值对迁移到 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> ；</li>
+<li>将原有 <code class="docutils literal"><span class="pre">ht[0]</span></code> 的数据清空，并将 <code class="docutils literal"><span class="pre">ht[1]</span></code> 替换为新的 <code class="docutils literal"><span class="pre">ht[0]</span></code> ；</li>
+</ol>
+<p>经过以上步骤之后，
+程序就在不改变原有键值对数据的基础上，
+增大了哈希表的大小。</p>
+<p>作为例子，
+以下四个小节展示了一次对哈希表进行 rehash 的完整过程。</p>
+<div class="section" id="id14">
+<h3>1. 开始 rehash<a class="headerlink" href="#id14" title="Permalink to this headline">¶</a></h3>
+<p>这个阶段有两个事情要做：</p>
+<ol class="arabic simple">
+<li>设置字典的 <code class="docutils literal"><span class="pre">rehashidx</span></code> 为 <code class="docutils literal"><span class="pre">0</span></code> ，标识着 rehash 的开始；</li>
+<li>为 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> 分配空间，大小至少为 <code class="docutils literal"><span class="pre">ht[0]-&gt;used</span></code> 的两倍；</li>
+</ol>
+<p>这时的字典是这个样子：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-8af45a72833893e88a305ccd461561b9b00a8816.svg" alt="digraph rehash_step_one {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    dict [label=&quot;dict | type | privdata |&lt;ht&gt; ht[2] | rehashidx: 0 | iterators&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    ht0 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 4 | sizemask: 3 | used: 4&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    ht1 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 8 | sizemask: 7 | used: 0&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    bucket [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 &quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    bucket1 [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 |&lt;table4&gt; 4 |&lt;table5&gt; 5 |&lt;table6&gt; 6 |&lt;table7&gt; 7&quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    pair_1 [label=&quot;&lt;head&gt;dictEntry |{key1 | value1 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_2 [label=&quot;&lt;head&gt;dictEntry |{key2 | value2 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_3 [label=&quot;&lt;head&gt;dictEntry |{key3 | value3 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_4 [label=&quot;&lt;head&gt;dictEntry |{key4 | value4 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    // null for bucket 0
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+    null2 [label=&quot;NULL&quot;, shape=plaintext];
+    null3 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // null for bucket 1
+    null10 [label=&quot;NULL&quot;, shape=plaintext];
+    null11 [label=&quot;NULL&quot;, shape=plaintext];
+    null12 [label=&quot;NULL&quot;, shape=plaintext];
+    null13 [label=&quot;NULL&quot;, shape=plaintext];
+    null14 [label=&quot;NULL&quot;, shape=plaintext];
+    null15 [label=&quot;NULL&quot;, shape=plaintext];
+    null16 [label=&quot;NULL&quot;, shape=plaintext];
+    null17 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    dict:ht -&gt; ht0:dictht [label=&quot;ht[0]&quot;];
+    dict:ht -&gt; ht1:dictht [label=&quot;ht[1]&quot;];
+
+    ht0:table -&gt; bucket:head;
+
+    ht1:table -&gt; bucket1:head;
+
+    bucket:table0 -&gt; pair_1:head; pair_1:next -&gt; null0;
+
+    bucket:table1 -&gt; pair_4:head; pair_4:next -&gt; null1;
+
+    bucket:table2 -&gt; pair_2:head; pair_2:next -&gt; null2;
+
+    bucket:table3 -&gt; pair_3:head; pair_3:next -&gt; null3;
+
+    bucket1:table0 -&gt; null10;
+    bucket1:table1 -&gt; null11;
+    bucket1:table2 -&gt; null12;
+    bucket1:table3 -&gt; null13;
+    bucket1:table4 -&gt; null14;
+    bucket1:table5 -&gt; null15;
+    bucket1:table6 -&gt; null16;
+    bucket1:table7 -&gt; null17;
+
+}" />
+</p>
+</div>
+<div class="section" id="id15">
+<h3>2. Rehash 进行中<a class="headerlink" href="#id15" title="Permalink to this headline">¶</a></h3>
+<p>在这个阶段， <code class="docutils literal"><span class="pre">ht[0]-&gt;table</span></code> 的节点会被逐渐迁移到 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> ，
+因为 rehash 是分多次进行的（细节在下一节解释），
+字典的 <code class="docutils literal"><span class="pre">rehashidx</span></code> 变量会记录 rehash 进行到 <code class="docutils literal"><span class="pre">ht[0]</span></code> 的哪个索引位置上。</p>
+<p>以下是 <code class="docutils literal"><span class="pre">rehashidx</span></code> 值为 <code class="docutils literal"><span class="pre">2</span></code> 时，字典的样子：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-8c861670330ef855a2e053e280506d6744e1e5d4.svg" alt="digraph rehash_step_two {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    dict [label=&quot;dict | type | privdata |&lt;ht&gt; ht[2] | rehashidx: 2 | iterators&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    ht0 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 4 | sizemask: 3 | used: 1&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    ht1 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 8 | sizemask: 7 | used: 3&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    bucket [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 &quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    bucket1 [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 |&lt;table4&gt; 4 |&lt;table5&gt; 5 |&lt;table6&gt; 6 |&lt;table7&gt; 7&quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    pair_1 [label=&quot;&lt;head&gt;dictEntry |{key1 | value1 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    pair_2 [label=&quot;&lt;head&gt;dictEntry |{key2 | value2 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    pair_3 [label=&quot;&lt;head&gt;dictEntry |{key3 | value3 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FADCAD&quot;];
+
+    pair_4 [label=&quot;&lt;head&gt;dictEntry |{key4 | value4 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    // null for bucket 0
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+    null2 [label=&quot;NULL&quot;, shape=plaintext];
+    null3 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // null for bucket 1
+    null10 [label=&quot;NULL&quot;, shape=plaintext];
+    null11 [label=&quot;NULL&quot;, shape=plaintext];
+    null12 [label=&quot;NULL&quot;, shape=plaintext];
+    null13 [label=&quot;NULL&quot;, shape=plaintext];
+    null14 [label=&quot;NULL&quot;, shape=plaintext];
+    null15 [label=&quot;NULL&quot;, shape=plaintext];
+    null16 [label=&quot;NULL&quot;, shape=plaintext];
+    null17 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    dict:ht -&gt; ht0:dictht [label=&quot;ht[0]&quot;];
+    dict:ht -&gt; ht1:dictht [label=&quot;ht[1]&quot;];
+
+    ht0:table -&gt; bucket:head;
+
+    ht1:table -&gt; bucket1:head;
+
+    bucket:table0 -&gt; null0;
+
+    bucket:table1 -&gt; null1;
+
+    bucket:table2 -&gt; null2;
+
+    bucket:table3 -&gt; pair_3:head; pair_3:next -&gt; null3;
+
+    bucket1:table0 -&gt; null10;
+    bucket1:table1 -&gt; pair_4:head; pair_4:next -&gt; null11;
+    bucket1:table2 -&gt; null12;
+    bucket1:table3 -&gt; pair_2:head; pair_2:next -&gt; null13;
+    bucket1:table4 -&gt; null14;
+    bucket1:table5 -&gt; null15;
+    bucket1:table6 -&gt; pair_1:head; pair_1:next -&gt; null16;
+    bucket1:table7 -&gt; null17;
+
+}" />
+</p>
+<p>注意除了节点的移动外，
+字典的 <code class="docutils literal"><span class="pre">rehashidx</span></code> 、 <code class="docutils literal"><span class="pre">ht[0]-&gt;used</span></code> 和 <code class="docutils literal"><span class="pre">ht[1]-&gt;used</span></code> 三个属性也产生了变化。</p>
+</div>
+<div class="section" id="id16">
+<h3>3. 节点迁移完毕<a class="headerlink" href="#id16" title="Permalink to this headline">¶</a></h3>
+<p>到了这个阶段，所有的节点都已经从 <code class="docutils literal"><span class="pre">ht[0]</span></code> 迁移到 <code class="docutils literal"><span class="pre">ht[1]</span></code> 了：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-15aedc410b921c8a0fd3183c5141b7d1f1ed6eed.svg" alt="digraph rehash_step_three {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    dict [label=&quot;dict | type | privdata |&lt;ht&gt; ht[2] | rehashidx: 3 | iterators&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    ht0 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 4 | sizemask: 3 | used: 0&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    ht1 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 8 | sizemask: 7 | used: 4&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    bucket [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 &quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    bucket1 [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 |&lt;table4&gt; 4 |&lt;table5&gt; 5 |&lt;table6&gt; 6 |&lt;table7&gt; 7&quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    pair_1 [label=&quot;&lt;head&gt;dictEntry |{key1 | value1 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    pair_2 [label=&quot;&lt;head&gt;dictEntry |{key2 | value2 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    pair_3 [label=&quot;&lt;head&gt;dictEntry |{key3 | value3 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    pair_4 [label=&quot;&lt;head&gt;dictEntry |{key4 | value4 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    // null for bucket 0
+    null0 [label=&quot;NULL&quot;, shape=plaintext];
+    null1 [label=&quot;NULL&quot;, shape=plaintext];
+    null2 [label=&quot;NULL&quot;, shape=plaintext];
+    null3 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // null for bucket 1
+    null10 [label=&quot;NULL&quot;, shape=plaintext];
+    null11 [label=&quot;NULL&quot;, shape=plaintext];
+    null12 [label=&quot;NULL&quot;, shape=plaintext];
+    null13 [label=&quot;NULL&quot;, shape=plaintext];
+    null14 [label=&quot;NULL&quot;, shape=plaintext];
+    null15 [label=&quot;NULL&quot;, shape=plaintext];
+    null16 [label=&quot;NULL&quot;, shape=plaintext];
+    null17 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    dict:ht -&gt; ht0:dictht [label=&quot;ht[0]&quot;];
+    dict:ht -&gt; ht1:dictht [label=&quot;ht[1]&quot;];
+
+    ht0:table -&gt; bucket:head;
+
+    ht1:table -&gt; bucket1:head;
+
+    bucket:table0 -&gt; null0;
+
+    bucket:table1 -&gt; null1;
+
+    bucket:table2 -&gt; null2;
+
+    bucket:table3 -&gt; null3;
+
+    bucket1:table0 -&gt; pair_3:head; pair_3:next -&gt; null10;
+    bucket1:table1 -&gt; pair_4:head; pair_4:next -&gt; null11;
+    bucket1:table2 -&gt; null12;
+    bucket1:table3 -&gt; pair_2:head; pair_2:next -&gt; null13;
+    bucket1:table4 -&gt; null14;
+    bucket1:table5 -&gt; null15;
+    bucket1:table6 -&gt; pair_1:head; pair_1:next -&gt; null16;
+    bucket1:table7 -&gt; null17;
+
+}" />
+</p>
+</div>
+<div class="section" id="id17">
+<h3>4. Rehash 完毕<a class="headerlink" href="#id17" title="Permalink to this headline">¶</a></h3>
+<p>在 rehash 的最后阶段，程序会执行以下工作：</p>
+<ol class="arabic simple">
+<li>释放 <code class="docutils literal"><span class="pre">ht[0]</span></code> 的空间；</li>
+<li>用 <code class="docutils literal"><span class="pre">ht[1]</span></code> 来代替 <code class="docutils literal"><span class="pre">ht[0]</span></code> ，使原来的 <code class="docutils literal"><span class="pre">ht[1]</span></code> 成为新的 <code class="docutils literal"><span class="pre">ht[0]</span></code> ；</li>
+<li>创建一个新的空哈希表，并将它设置为 <code class="docutils literal"><span class="pre">ht[1]</span></code> ；</li>
+<li>将字典的 <code class="docutils literal"><span class="pre">rehashidx</span></code> 属性设置为 <code class="docutils literal"><span class="pre">-1</span></code> ，标识 rehash 已停止；</li>
+</ol>
+<p>以下是字典 rehash 完毕之后的样子：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-6d5b0f4115d30fac37af21f3834b5554d8824923.svg" alt="digraph rehash_step_four {
+
+    // setting
+
+    rankdir = LR;
+
+    node[shape=record, style = filled];
+
+    edge [style = bold];
+
+    // nodes
+
+    dict [label=&quot;dict | type | privdata |&lt;ht&gt; ht[2] | rehashidx: -1 | iterators&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    ht0 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 8 | sizemask: 7 | used: 4&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    ht3 [label=&quot;&lt;dictht&gt;dictht |&lt;table&gt; table | size: 0 | sizemask: 0 | used: 0&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    bucket1 [label=&quot;&lt;head&gt;dictEntry**\n(bucket) |&lt;table0&gt; 0 |&lt;table1&gt; 1 |&lt;table2&gt; 2 |&lt;table3&gt; 3 |&lt;table4&gt; 4 |&lt;table5&gt; 5 |&lt;table6&gt; 6 |&lt;table7&gt; 7&quot;, fillcolor = &quot;#F2F2F2&quot;];
+
+    pair_1 [label=&quot;&lt;head&gt;dictEntry |{key1 | value1 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    pair_2 [label=&quot;&lt;head&gt;dictEntry |{key2 | value2 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    pair_3 [label=&quot;&lt;head&gt;dictEntry |{key3 | value3 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    pair_4 [label=&quot;&lt;head&gt;dictEntry |{key4 | value4 |&lt;next&gt;next}&quot;, fillcolor = &quot;#FFC1C1&quot;];
+
+    // null for bucket 1
+    null10 [label=&quot;NULL&quot;, shape=plaintext];
+    null11 [label=&quot;NULL&quot;, shape=plaintext];
+    null12 [label=&quot;NULL&quot;, shape=plaintext];
+    null13 [label=&quot;NULL&quot;, shape=plaintext];
+    null14 [label=&quot;NULL&quot;, shape=plaintext];
+    null15 [label=&quot;NULL&quot;, shape=plaintext];
+    null16 [label=&quot;NULL&quot;, shape=plaintext];
+    null17 [label=&quot;NULL&quot;, shape=plaintext];
+
+    // lines
+
+    dict:ht -&gt; ht0:dictht [label=&quot;ht[0]&quot;];
+    dict:ht -&gt; ht3:dictht [label=&quot;ht[1]&quot;];
+
+    null_bucket [label=&quot;NULL&quot;, shape=plaintext];
+    ht3:table -&gt; null_bucket;
+
+    ht0:table -&gt; bucket1:head;
+
+    bucket1:table0 -&gt; pair_3:head; pair_3:next -&gt; null10;
+    bucket1:table1 -&gt; pair_4:head; pair_4:next -&gt; null11;
+    bucket1:table2 -&gt; null12;
+    bucket1:table3 -&gt; pair_2:head; pair_2:next -&gt; null13;
+    bucket1:table4 -&gt; null14;
+    bucket1:table5 -&gt; null15;
+    bucket1:table6 -&gt; pair_1:head; pair_1:next -&gt; null16;
+    bucket1:table7 -&gt; null17;
+
+}" />
+</p>
+<p>对比字典 rehash 前后，
+新的 <code class="docutils literal"><span class="pre">ht[0]</span></code> 空间更大，
+并且字典原有的键值对也没有被修改或者删除。</p>
+</div>
+</div>
+<div class="section" id="id18">
+<h2>渐进式 rehash<a class="headerlink" href="#id18" title="Permalink to this headline">¶</a></h2>
+<p>在上一节，我们了解了字典的 rehash 过程，
+需要特别指出的是， rehash 程序并不是在激活之后，就马上执行直到完成的，
+而是分多次、渐进式地完成的。</p>
+<p>假设这样一个场景：在一个有很多键值对的字典里，
+某个用户在添加新键值对时触发了 rehash 过程，
+如果这个 rehash 过程必须将所有键值对迁移完毕之后才将结果返回给用户，
+这样的处理方式将是非常不友好的。</p>
+<p>另一方面，
+要求服务器必须阻塞直到 rehash 完成，
+这对于 Redis 服务器本身也是不能接受的。</p>
+<p>为了解决这个问题，
+Redis 使用了渐进式（incremental）的 rehash 方式：
+通过将 rehash 分散到多个步骤中进行，
+从而避免了集中式的计算。</p>
+<p>渐进式 rehash 主要由 <code class="docutils literal"><span class="pre">_dictRehashStep</span></code> 和 <code class="docutils literal"><span class="pre">dictRehashMilliseconds</span></code> 两个函数进行：</p>
+<ul class="simple">
+<li><code class="docutils literal"><span class="pre">_dictRehashStep</span></code> 用于对数据库字典、以及哈希键的字典进行被动 rehash ；</li>
+<li><code class="docutils literal"><span class="pre">dictRehashMilliseconds</span></code> 则由 Redis 服务器常规任务程序（server cron job）执行，用于对数据库字典进行主动 rehash ；</li>
+</ul>
+<div class="section" id="dictrehashstep">
+<h3>_dictRehashStep<a class="headerlink" href="#dictrehashstep" title="Permalink to this headline">¶</a></h3>
+<p>每次执行 <code class="docutils literal"><span class="pre">_dictRehashStep</span></code> ，
+<code class="docutils literal"><span class="pre">ht[0]-&gt;table</span></code> 哈希表第一个不为空的索引上的所有节点就会全部迁移到 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> 。</p>
+<p>在 rehash 开始进行之后（<code class="docutils literal"><span class="pre">d-&gt;rehashidx</span></code> 不为 <code class="docutils literal"><span class="pre">-1</span></code>），
+每次执行一次添加、查找、删除操作，
+<code class="docutils literal"><span class="pre">_dictRehashStep</span></code> 都会被执行一次：</p>
+<p class="graphviz">
+<img src="../_images/graphviz-121adbc9859ad43720ccb8d4d91bf28062af3256.svg" alt="digraph rehash_step {
+
+    node[shape=plaintext, style = filled];
+
+    edge [style = bold];
+
+    // callers
+
+    dictAdd [label=&quot;dictAdd&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    dictFind [label=&quot;dictFind&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    dictDelete [label=&quot;dictDelete&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    dictGetRandomKey [label=&quot;dictGetRandomKey&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    // rehash
+
+    rehashing_or_not [shape=diamond, label=&quot;正在进行 rehash ？&quot;, fillcolor = &quot;#95BBE3&quot;];
+
+    _dictRehashStep [label=&quot;_dictRehashStep&quot;, fillcolor = &quot;#A8E270&quot;];
+
+    one_index [label=&quot;将 ht[0] 第一个不为空索引上的所有节点迁移至 ht[1]&quot;];
+
+    // edge
+
+    dictAdd -&gt; rehashing_or_not;
+
+    dictFind -&gt; rehashing_or_not;
+
+    dictDelete -&gt; rehashing_or_not;
+
+    dictGetRandomKey -&gt; rehashing_or_not;
+
+    rehashing_or_not -&gt; _dictRehashStep [label=&quot;是&quot;];
+
+    _dictRehashStep -&gt; one_index;
+}" />
+</p>
+<p>因为字典会保持哈希表大小和节点数的比率在一个很小的范围内，
+所以每个索引上的节点数量不会很多（从目前版本的 rehash 条件来看，平均只有一个，最多通常也不会超过五个），
+所以在执行操作的同时，对单个索引上的节点进行迁移，
+几乎不会对响应时间造成影响。</p>
+</div>
+<div class="section" id="dictrehashmilliseconds">
+<h3>dictRehashMilliseconds<a class="headerlink" href="#dictrehashmilliseconds" title="Permalink to this headline">¶</a></h3>
+<p><code class="docutils literal"><span class="pre">dictRehashMilliseconds</span></code> 可以在指定的毫秒数内，
+对字典进行 rehash 。</p>
+<p>当 Redis 的服务器常规任务执行时，
+<code class="docutils literal"><span class="pre">dictRehashMilliseconds</span></code> 会被执行，
+在规定的时间内，
+尽可能地对数据库字典中那些需要 rehash 的字典进行 rehash ，
+从而加速数据库字典的 rehash 进程（progress）。</p>
+</div>
+<div class="section" id="id19">
+<h3>其他措施<a class="headerlink" href="#id19" title="Permalink to this headline">¶</a></h3>
+<p>在哈希表进行 rehash 时，
+字典还会采取一些特别的措施，
+确保 rehash 顺利、正确地进行：</p>
+<ul class="simple">
+<li>因为在 rehash 时，字典会同时使用两个哈希表，所以在这期间的所有查找、删除等操作，除了在 <code class="docutils literal"><span class="pre">ht[0]</span></code> 上进行，还需要在 <code class="docutils literal"><span class="pre">ht[1]</span></code> 上进行。</li>
+<li>在执行添加操作时，新的节点会直接添加到 <code class="docutils literal"><span class="pre">ht[1]</span></code> 而不是 <code class="docutils literal"><span class="pre">ht[0]</span></code> ，这样保证 <code class="docutils literal"><span class="pre">ht[0]</span></code> 的节点数量在整个 rehash 过程中都只减不增。</li>
+</ul>
+</div>
+</div>
+<div class="section" id="id20">
+<h2>字典的收缩<a class="headerlink" href="#id20" title="Permalink to this headline">¶</a></h2>
+<p>上面关于 rehash 的章节描述了通过 rehash 对字典进行扩展（expand）的情况，
+如果哈希表的可用节点数比已用节点数大很多的话，
+那么也可以通过对哈希表进行 rehash 来收缩（shrink）字典。</p>
+<p>收缩 rehash 和上面展示的扩展 rehash 的操作几乎一样，执行以下步骤：</p>
+<ol class="arabic simple">
+<li>创建一个比 <code class="docutils literal"><span class="pre">ht[0]-&gt;table</span></code> 小的 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> ；</li>
+<li>将 <code class="docutils literal"><span class="pre">ht[0]-&gt;table</span></code> 中的所有键值对迁移到 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> ；</li>
+<li>将原有 <code class="docutils literal"><span class="pre">ht[0]</span></code> 的数据清空，并将 <code class="docutils literal"><span class="pre">ht[1]</span></code> 替换为新的 <code class="docutils literal"><span class="pre">ht[0]</span></code> ；</li>
+</ol>
+<p>扩展 rehash 和收缩 rehash 执行完全相同的过程，
+一个 rehash 是扩展还是收缩字典，
+关键在于新分配的 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> 的大小：</p>
+<ul class="simple">
+<li>如果 rehash 是扩展操作，那么 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> 比 <code class="docutils literal"><span class="pre">ht[0]-&gt;table</span></code> 要大；</li>
+<li>如果 rehash 是收缩操作，那么 <code class="docutils literal"><span class="pre">ht[1]-&gt;table</span></code> 比 <code class="docutils literal"><span class="pre">ht[0]-&gt;table</span></code> 要小；</li>
+</ul>
+<p>字典的收缩规则由 <code class="docutils literal"><span class="pre">redis.c/htNeedsResize</span></code> 函数定义：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * 检查字典的使用率是否低于系统允许的最小比率</span>
+<span class="cm"> *</span>
+<span class="cm"> * 是的话返回 1 ，否则返回 0 。</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="nf">htNeedsResize</span><span class="p">(</span><span class="n">dict</span> <span class="o">*</span><span class="n">dict</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">long</span> <span class="kt">long</span> <span class="n">size</span><span class="p">,</span> <span class="n">used</span><span class="p">;</span>
+
+    <span class="c1">// 哈希表大小</span>
+    <span class="n">size</span> <span class="o">=</span> <span class="n">dictSlots</span><span class="p">(</span><span class="n">dict</span><span class="p">);</span>
+
+    <span class="c1">// 哈希表已用节点数量</span>
+    <span class="n">used</span> <span class="o">=</span> <span class="n">dictSize</span><span class="p">(</span><span class="n">dict</span><span class="p">);</span>
+
+    <span class="c1">// 当哈希表的大小大于 DICT_HT_INITIAL_SIZE</span>
+    <span class="c1">// 并且字典的填充率低于 REDIS_HT_MINFILL 时</span>
+    <span class="c1">// 返回 1</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">size</span> <span class="o">&amp;&amp;</span> <span class="n">used</span> <span class="o">&amp;&amp;</span> <span class="n">size</span> <span class="o">&gt;</span> <span class="n">DICT_HT_INITIAL_SIZE</span> <span class="o">&amp;&amp;</span>
+            <span class="p">(</span><span class="n">used</span><span class="o">*</span><span class="mi">100</span><span class="o">/</span><span class="n">size</span> <span class="o">&lt;</span> <span class="n">REDIS_HT_MINFILL</span><span class="p">));</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p>在默认情况下，
+<code class="docutils literal"><span class="pre">REDIS_HT_MINFILL</span></code> 的值为 <code class="docutils literal"><span class="pre">10</span></code> ，
+也即是说，
+当字典的填充率低于 10% 时，
+程序就可以对这个字典进行收缩操作了。</p>
+<p>字典收缩和字典扩展的一个区别是：</p>
+<ul class="simple">
+<li>字典的扩展操作是自动触发的（不管是自动扩展还是强制扩展）；</li>
+<li>而字典的收缩操作则是由程序手动执行。</li>
+</ul>
+<p>因此，
+使用字典的程序可以决定何时对字典进行收缩：</p>
+<ul class="simple">
+<li>当字典用于实现哈希键的时候，
+每次从字典中删除一个键值对，
+程序就会执行一次 <code class="docutils literal"><span class="pre">htNeedsResize</span></code> 函数，
+如果字典达到了收缩的标准，
+程序将立即对字典进行收缩；</li>
+<li>当字典用于实现数据库键空间（key space）的时候，
+收缩的时机由 <code class="docutils literal"><span class="pre">redis.c/tryResizeHashTables</span></code> 函数决定，
+具体信息请参考《<a class="reference internal" href="../internal/db.html#db-chapter"><em>数据库</em></a>》一章的《<a class="reference internal" href="../internal/db.html#db-expand-and-shrink"><em>数据库空间的收缩和扩展</em></a>》小节；</li>
+</ul>
+</div>
+<div class="section" id="id21">
+<h2>字典其他操作<a class="headerlink" href="#id21" title="Permalink to this headline">¶</a></h2>
+<p>除了添加操作和伸展/收缩操作之外，
+字典还定义了一些其他操作，
+比如常见的查找、删除和更新。</p>
+<p>因为链地址法哈希表实现的相关信息可以从任何一本数据结构或算法书上找到，
+这里不再对字典的其他操作进行介绍，
+不过前面对创建字典、添加键值对、收缩和扩展 rehash 的讨论已经涵盖了字典模块的核心内容。</p>
+</div>
+<div class="section" id="id22">
+<h2>字典的迭代<a class="headerlink" href="#id22" title="Permalink to this headline">¶</a></h2>
+<p>字典带有自己的<a class="reference external" href="http://en.wikipedia.org/wiki/Iterator">迭代器</a>实现 ——
+对字典进行迭代实际上就是对字典所使用的哈希表进行迭代：</p>
+<ul class="simple">
+<li>迭代器首先迭代字典的第一个哈希表，然后，如果 rehash 正在进行的话，就继续对第二个哈希表进行迭代。</li>
+<li>当迭代哈希表时，找到第一个不为空的索引，然后迭代这个索引上的所有节点。</li>
+<li>当这个索引迭代完了，继续查找下一个不为空的索引，如此反覆，直到整个哈希表都迭代完为止。</li>
+</ul>
+<p>整个迭代过程可以用伪代码表示如下：</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">iter_dict</span><span class="p">(</span><span class="nb">dict</span><span class="p">):</span>
+
+    <span class="c"># 迭代 0 号哈希表</span>
+    <span class="n">iter_table</span><span class="p">(</span><span class="n">ht</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">table</span><span class="p">)</span>
+
+    <span class="c"># 如果正在执行 rehash ，那么也迭代 1 号哈希表</span>
+    <span class="k">if</span> <span class="nb">dict</span><span class="o">.</span><span class="n">is_rehashing</span><span class="p">():</span> <span class="n">iter_table</span><span class="p">(</span><span class="n">ht</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-&gt;</span><span class="n">table</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">iter_table</span><span class="p">(</span><span class="n">table</span><span class="p">):</span>
+
+    <span class="c"># 遍历哈希表上的所有索引</span>
+    <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">table</span><span class="p">:</span>
+
+        <span class="c"># 跳过空索引</span>
+        <span class="k">if</span> <span class="n">table</span><span class="p">[</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">empty</span><span class="p">():</span>
+            <span class="k">continue</span>
+
+        <span class="c"># 遍历索引上的所有节点</span>
+        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">table</span><span class="p">[</span><span class="n">index</span><span class="p">]:</span>
+
+            <span class="c"># 处理节点</span>
+            <span class="n">do_something_with</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>字典的迭代器有两种：</p>
+<ul class="simple">
+<li>安全迭代器：在迭代进行过程中，可以对字典进行修改。</li>
+<li>不安全迭代器：在迭代进行过程中，不对字典进行修改。</li>
+</ul>
+<p>以下是迭代器的数据结构定义：</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cm">/*</span>
+<span class="cm"> * 字典迭代器</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">dictIterator</span> <span class="p">{</span>
+
+    <span class="n">dict</span> <span class="o">*</span><span class="n">d</span><span class="p">;</span>                <span class="c1">// 正在迭代的字典</span>
+
+    <span class="kt">int</span> <span class="n">table</span><span class="p">,</span>              <span class="c1">// 正在迭代的哈希表的号码（0 或者 1）</span>
+        <span class="n">index</span><span class="p">,</span>              <span class="c1">// 正在迭代的哈希表数组的索引</span>
+        <span class="n">safe</span><span class="p">;</span>               <span class="c1">// 是否安全？</span>
+
+    <span class="n">dictEntry</span> <span class="o">*</span><span class="n">entry</span><span class="p">,</span>       <span class="c1">// 当前哈希节点</span>
+              <span class="o">*</span><span class="n">nextEntry</span><span class="p">;</span>   <span class="c1">// 当前哈希节点的后继节点</span>
+
+<span class="p">}</span> <span class="n">dictIterator</span><span class="p">;</span>
+</pre></div>
+</div>
+<p>以下函数是这个迭代器的 API ，API 的作用及相关算法复杂度：</p>
+<table border="1" class="docutils">
+<colgroup>
+<col width="23%" />
+<col width="58%" />
+<col width="19%" />
+</colgroup>
+<thead valign="bottom">
+<tr class="row-odd"><th class="head">函数</th>
+<th class="head">作用</th>
+<th class="head">算法复杂度</th>
+</tr>
+</thead>
+<tbody valign="top">
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">dictGetIterator</span></code></td>
+<td>创建一个不安全迭代器。</td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">dictGetSafeIterator</span></code></td>
+<td>创建一个安全迭代器。</td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-even"><td><code class="docutils literal"><span class="pre">dictNext</span></code></td>
+<td>返回迭代器指向的当前节点，如果迭代完毕，返回 <code class="docutils literal"><span class="pre">NULL</span></code> 。</td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+<tr class="row-odd"><td><code class="docutils literal"><span class="pre">dictReleaseIterator</span></code></td>
+<td>释放迭代器。</td>
+<td><span class="math">\(O(1)\)</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="section" id="id24">
+<h2>小结<a class="headerlink" href="#id24" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>字典是由键值对构成的抽象数据结构。</li>
+<li>Redis 中的数据库和哈希键都基于字典来实现。</li>
+<li>Redis 字典的底层实现为哈希表，每个字典使用两个哈希表，一般情况下只使用 0 号哈希表，只有在 rehash 进行时，才会同时使用 0 号和 1 号哈希表。</li>
+<li>哈希表使用链地址法来解决键冲突的问题。</li>
+<li>Rehash 可以用于扩展或收缩哈希表。</li>
+<li>对哈希表的 rehash 是分多次、渐进式地进行的。</li>
+</ul>
+</div>
+</div>
+
+
+
+            <div class="section" id="discuss">
+    <h2>
+        讨论
+        <a class="headerlink" href="#discuss" title="永久链接至标题">¶</a>
+    </h2>
+    <div id="disqus_thread"></div>
+    <script type="text/javascript">
+        /* * * CONFIGURATION VARIABLES: EDIT BEFORE PASTING INTO YOUR WEBPAGE * * */
+        var disqus_shortname = 'redisbook'; // required: replace example with your forum shortname
+
+        /* * * DON'T EDIT BELOW THIS LINE * * */
+        (function() {
+        var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+        dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+        (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+        })();
+    </script>
+    <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+    <a href="http://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="skiplist.html" title="跳跃表"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="adlist.html" title="双端链表"
+             >previous</a> |</li>
+        <li><a href="../index.html">Redis 设计与实现</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2013, huangz1990.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+    </div>
+  </body>
+</html>
