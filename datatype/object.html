@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="字符串" href="string.html" />
     <link rel="prev" title="压缩列表" href="../compress-datastruct/ziplist.html" /> 
@@ -63,11 +63,11 @@
 <p>在 Redis 的命令中，用于对键（key）进行处理的命令占了很大一部分，
 而对于键所保存的值的类型（后简称“键的类型”），键能执行的命令又各不相同。</p>
 <p>比如说，
-<a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><em>LPUSH</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/llen.html#llen" title="(in Redis 命令参考 v2.8)"><em>LLEN</em></a> 只能用于列表键，
-而 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html#sadd" title="(in Redis 命令参考 v2.8)"><em>SADD</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/srandmember.html#srandmember" title="(in Redis 命令参考 v2.8)"><em>SRANDMEMBER</em></a> 只能用于集合键，
+<a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><span>LPUSH</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/llen.html#llen" title="(in Redis 命令参考 v2.8)"><span>LLEN</span></a> 只能用于列表键，
+而 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html#sadd" title="(in Redis 命令参考 v2.8)"><span>SADD</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/srandmember.html#srandmember" title="(in Redis 命令参考 v2.8)"><span>SRANDMEMBER</span></a> 只能用于集合键，
 等等。</p>
 <p>另外一些命令，
-比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/del.html#del" title="(in Redis 命令参考 v2.8)"><em>DEL</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/ttl.html#ttl" title="(in Redis 命令参考 v2.8)"><em>TTL</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/type.html#type" title="(in Redis 命令参考 v2.8)"><em>TYPE</em></a> ，
+比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/del.html#del" title="(in Redis 命令参考 v2.8)"><span>DEL</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/ttl.html#ttl" title="(in Redis 命令参考 v2.8)"><span>TTL</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/type.html#type" title="(in Redis 命令参考 v2.8)"><span>TYPE</span></a> ，
 可以用于任何类型的键，
 但是，
 要正确实现这些命令，
@@ -87,9 +87,9 @@ Redis 的每一种数据类型，比如字符串、列表、有序集，
 <p>比如说，
 集合类型就可以由字典和整数集合两种不同的数据结构实现，
 但是，
-当用户执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><em>ZADD</em></a> 命令时，
+当用户执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><span>ZADD</span></a> 命令时，
 他/她应该不必关心集合使用的是什么编码，
-只要 Redis 能按照 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><em>ZADD</em></a> 命令的指示，
+只要 Redis 能按照 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><span>ZADD</span></a> 命令的指示，
 将新元素添加到集合就可以了。</p>
 <p>这说明，操作数据类型的命令除了要对键的类型进行检查之外，
 还需要根据数据类型的不同编码进行多态处理。</p>
@@ -455,7 +455,7 @@ Redis 的对象系统使用了<a class="reference external" href="http://en.wiki
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

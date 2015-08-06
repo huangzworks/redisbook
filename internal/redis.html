@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="prev" title="事件" href="ae.html" /> 
 
@@ -271,9 +271,9 @@ Redis 在初始化完 <code class="docutils literal"><span class="pre">server</s
 <li>客户端的查询缓冲（query buffer）和回复缓存（reply buffer）。</li>
 <li>一个指向命令函数的指针，以及字符串形式的命令、命令参数和命令个数，这些属性会在命令执行时使用。</li>
 <li>客户端状态：记录了客户端是否处于 SLAVE 、 MONITOR 或者事务状态。</li>
-<li>实现事务功能（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a>）所需的数据结构。</li>
-<li>实现阻塞功能（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><em>BLPOP</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpoplpush.html#brpoplpush" title="(in Redis 命令参考 v2.8)"><em>BRPOPLPUSH</em></a>）所需的数据结构。</li>
-<li>实现订阅与发布功能（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><em>SUBSCRIBE</em></a>）所需的数据结构。</li>
+<li>实现事务功能（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a>）所需的数据结构。</li>
+<li>实现阻塞功能（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><span>BLPOP</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpoplpush.html#brpoplpush" title="(in Redis 命令参考 v2.8)"><span>BRPOPLPUSH</span></a>）所需的数据结构。</li>
+<li>实现订阅与发布功能（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><span>SUBSCRIBE</span></a>）所需的数据结构。</li>
 <li>统计数据和选项：客户端创建的时间，客户端和服务器最后交互的时间，缓存的大小，等等。</li>
 </ul>
 <div class="admonition note">
@@ -299,7 +299,7 @@ Redis 在初始化完 <code class="docutils literal"><span class="pre">server</s
 <div class="section" id="set">
 <h2>命令请求实例： SET 的执行过程<a class="headerlink" href="#set" title="Permalink to this headline">¶</a></h2>
 <p>为了更直观地理解命令执行的整个过程，
-我们用一个实际执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 命令的例子来讲解命令执行的过程。</p>
+我们用一个实际执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><span>SET</span></a> 命令的例子来讲解命令执行的过程。</p>
 <p>假设现在客户端 C1 是连接到服务器 S 的一个客户端，
 当用户执行命令 <code class="docutils literal"><span class="pre">SET</span> <span class="pre">YEAR</span> <span class="pre">2013</span></code> 时，
 客户端调用写入函数，
@@ -394,7 +394,7 @@ Redis 在初始化完 <code class="docutils literal"><span class="pre">server</s
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

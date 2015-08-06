@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="RDB" href="rdb.html" />
     <link rel="prev" title="慢查询日志" href="../feature/slowlog.html" /> 
@@ -95,10 +95,10 @@
 <div class="section" id="id3">
 <h2>数据库的切换<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
 <p><code class="docutils literal"><span class="pre">redisDb</span></code> 结构的 <code class="docutils literal"><span class="pre">id</span></code> 域保存着数据库的号码。</p>
-<p>这个号码很容易让人将它和切换数据库的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/connection/select.html#select" title="(in Redis 命令参考 v2.8)"><em>SELECT</em></a> 命令联系在一起，
+<p>这个号码很容易让人将它和切换数据库的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/connection/select.html#select" title="(in Redis 命令参考 v2.8)"><span>SELECT</span></a> 命令联系在一起，
 但是，
 实际上，
-<code class="docutils literal"><span class="pre">id</span></code> 属性并不是用来实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/connection/select.html#select" title="(in Redis 命令参考 v2.8)"><em>SELECT</em></a> 命令，
+<code class="docutils literal"><span class="pre">id</span></code> 属性并不是用来实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/connection/select.html#select" title="(in Redis 命令参考 v2.8)"><span>SELECT</span></a> 命令，
 而是给 Redis 内部程序使用的。</p>
 <p>当 Redis 服务器初始化时，
 它会创建出 <code class="docutils literal"><span class="pre">redis.h/REDIS_DEFAULT_DBNUM</span></code> 个数据库，
@@ -132,8 +132,8 @@
 <p>因为 Redis 是一个键值对数据库（key-value pairs database），
 所以它的数据库本身也是一个字典（俗称 key space）：</p>
 <ul class="simple">
-<li>字典的键是一个<a class="reference internal" href="../datatype/string.html#string-chapter"><em>字符串</em></a>对象。</li>
-<li>字典的值则可以是包括<a class="reference internal" href="../datatype/string.html#string-chapter"><em>字符串</em></a>、<a class="reference internal" href="../datatype/list.html#list-chapter"><em>列表</em></a>、<a class="reference internal" href="../datatype/hash.html#hash-chapter"><em>哈希表</em></a>、<a class="reference internal" href="../datatype/set.html#set-chapter"><em>集合</em></a>或<a class="reference internal" href="../datatype/sorted_set.html#sorted-set-chapter"><em>有序集</em></a>在内的任意一种 Redis 类型对象。</li>
+<li>字典的键是一个<a class="reference internal" href="../datatype/string.html#string-chapter"><span>字符串</span></a>对象。</li>
+<li>字典的值则可以是包括<a class="reference internal" href="../datatype/string.html#string-chapter"><span>字符串</span></a>、<a class="reference internal" href="../datatype/list.html#list-chapter"><span>列表</span></a>、<a class="reference internal" href="../datatype/hash.html#hash-chapter"><span>哈希表</span></a>、<a class="reference internal" href="../datatype/set.html#set-chapter"><span>集合</span></a>或<a class="reference internal" href="../datatype/sorted_set.html#sorted-set-chapter"><span>有序集</span></a>在内的任意一种 Redis 类型对象。</li>
 </ul>
 <p>在 <code class="docutils literal"><span class="pre">redisDb</span></code> 结构的 <code class="docutils literal"><span class="pre">dict</span></code> 属性中，保存着数据库的所有键值对数据。</p>
 <p>下图展示了一个包含 <code class="docutils literal"><span class="pre">number</span></code> 、 <code class="docutils literal"><span class="pre">book</span></code> 、 <code class="docutils literal"><span class="pre">message</span></code> 三个键的数据库 ——
@@ -185,8 +185,8 @@
 所以对数据库的操作基本上都是对字典的操作，
 加上以下一些维护操作：</p>
 <ul class="simple">
-<li>更新键的命中率和不命中率，这个值可以用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/info.html#info" title="(in Redis 命令参考 v2.8)"><em>INFO</em></a> 命令查看；</li>
-<li>更新键的 LRU 时间，这个值可以用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/object.html#object" title="(in Redis 命令参考 v2.8)"><em>OBJECT</em></a> 命令来查看；</li>
+<li>更新键的命中率和不命中率，这个值可以用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/info.html#info" title="(in Redis 命令参考 v2.8)"><span>INFO</span></a> 命令查看；</li>
+<li>更新键的 LRU 时间，这个值可以用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/object.html#object" title="(in Redis 命令参考 v2.8)"><span>OBJECT</span></a> 命令来查看；</li>
 <li>删除过期键（稍后会详细说明）；</li>
 <li>如果键被修改了的话，那么将键设为脏（用于事务监视），并将服务器设为脏（等待 RDB 保存）；</li>
 <li>将对键的修改发送到 AOF 文件和附属节点，保持数据库状态的一致；</li>
@@ -500,11 +500,11 @@
 <h3>其他操作<a class="headerlink" href="#id10" title="Permalink to this headline">¶</a></h3>
 <p>除了上面展示的键值操作之外，还有很多针对数据库本身的命令，也是通过对键空间进行处理来完成的：</p>
 <ul class="simple">
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><em>FLUSHDB</em></a> 命令：删除键空间中的所有键值对。</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/randomkey.html#randomkey" title="(in Redis 命令参考 v2.8)"><em>RANDOMKEY</em></a> 命令：从键空间中随机返回一个键。</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/dbsize.html#dbsize" title="(in Redis 命令参考 v2.8)"><em>DBSIZE</em></a> 命令：返回键空间中键值对的数量。</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/exists.html#exists" title="(in Redis 命令参考 v2.8)"><em>EXISTS</em></a> 命令：检查给定键是否存在于键空间中。</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/rename.html#rename" title="(in Redis 命令参考 v2.8)"><em>RENAME</em></a> 命令：在键空间中，对给定键进行改名。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><span>FLUSHDB</span></a> 命令：删除键空间中的所有键值对。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/randomkey.html#randomkey" title="(in Redis 命令参考 v2.8)"><span>RANDOMKEY</span></a> 命令：从键空间中随机返回一个键。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/dbsize.html#dbsize" title="(in Redis 命令参考 v2.8)"><span>DBSIZE</span></a> 命令：返回键空间中键值对的数量。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/exists.html#exists" title="(in Redis 命令参考 v2.8)"><span>EXISTS</span></a> 命令：检查给定键是否存在于键空间中。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/rename.html#rename" title="(in Redis 命令参考 v2.8)"><span>RENAME</span></a> 命令：在键空间中，对给定键进行改名。</li>
 </ul>
 <p>等等。</p>
 </div>
@@ -517,7 +517,7 @@
 关于数据库如何保存键的过期时间，
 以及如何处理过期键这一问题，
 我们还没有讨论到。</p>
-<p>通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expire.html#expire" title="(in Redis 命令参考 v2.8)"><em>EXPIRE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpire.html#pexpire" title="(in Redis 命令参考 v2.8)"><em>PEXPIRE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expireat.html#expireat" title="(in Redis 命令参考 v2.8)"><em>EXPIREAT</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpireat.html#pexpireat" title="(in Redis 命令参考 v2.8)"><em>PEXPIREAT</em></a> 四个命令，
+<p>通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expire.html#expire" title="(in Redis 命令参考 v2.8)"><span>EXPIRE</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpire.html#pexpire" title="(in Redis 命令参考 v2.8)"><span>PEXPIRE</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expireat.html#expireat" title="(in Redis 命令参考 v2.8)"><span>EXPIREAT</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpireat.html#pexpireat" title="(in Redis 命令参考 v2.8)"><span>PEXPIREAT</span></a> 四个命令，
 客户端可以给某个存在的键设置过期时间，
 当键的过期时间到达时，
 键就不再可用：</p>
@@ -531,7 +531,7 @@
 <span class="p">(</span><span class="n">nil</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>命令 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/ttl.html#ttl" title="(in Redis 命令参考 v2.8)"><em>TTL</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pttl.html#pttl" title="(in Redis 命令参考 v2.8)"><em>PTTL</em></a> 则用于返回给定键距离过期还有多长时间：</p>
+<p>命令 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/ttl.html#ttl" title="(in Redis 命令参考 v2.8)"><span>TTL</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pttl.html#pttl" title="(in Redis 命令参考 v2.8)"><span>PTTL</span></a> 则用于返回给定键距离过期还有多长时间：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">SETEX</span> <span class="n">key</span> <span class="mi">10086</span> <span class="n">value</span>
 <span class="n">OK</span>
 
@@ -636,17 +636,17 @@
 <h2>设置生存时间<a class="headerlink" href="#id13" title="Permalink to this headline">¶</a></h2>
 <p>Redis 有四个命令可以设置键的生存时间（可以存活多久）和过期时间（什么时候到期）：</p>
 <ul class="simple">
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expire.html#expire" title="(in Redis 命令参考 v2.8)"><em>EXPIRE</em></a> 以秒为单位设置键的生存时间；</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpire.html#pexpire" title="(in Redis 命令参考 v2.8)"><em>PEXPIRE</em></a> 以毫秒为单位设置键的生存时间；</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expireat.html#expireat" title="(in Redis 命令参考 v2.8)"><em>EXPIREAT</em></a> 以秒为单位，设置键的过期 UNIX 时间戳；</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpireat.html#pexpireat" title="(in Redis 命令参考 v2.8)"><em>PEXPIREAT</em></a> 以毫秒为单位，设置键的过期 UNIX 时间戳。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expire.html#expire" title="(in Redis 命令参考 v2.8)"><span>EXPIRE</span></a> 以秒为单位设置键的生存时间；</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpire.html#pexpire" title="(in Redis 命令参考 v2.8)"><span>PEXPIRE</span></a> 以毫秒为单位设置键的生存时间；</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expireat.html#expireat" title="(in Redis 命令参考 v2.8)"><span>EXPIREAT</span></a> 以秒为单位，设置键的过期 UNIX 时间戳；</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpireat.html#pexpireat" title="(in Redis 命令参考 v2.8)"><span>PEXPIREAT</span></a> 以毫秒为单位，设置键的过期 UNIX 时间戳。</li>
 </ul>
 <p>虽然有那么多种不同单位和不同形式的设置方式，
 但是 <code class="docutils literal"><span class="pre">expires</span></code> 字典的值只保存“以毫秒为单位的过期 UNIX 时间戳”，
 这就是说，
 通过进行转换，
-所有命令的效果最后都和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpireat.html#pexpireat" title="(in Redis 命令参考 v2.8)"><em>PEXPIREAT</em></a> 命令的效果一样。</p>
-<p>举个例子，从 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expire.html#expire" title="(in Redis 命令参考 v2.8)"><em>EXPIRE</em></a> 命令到 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpireat.html#pexpireat" title="(in Redis 命令参考 v2.8)"><em>PEXPIREAT</em></a> 命令的转换可以用伪代码表示如下：</p>
+所有命令的效果最后都和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpireat.html#pexpireat" title="(in Redis 命令参考 v2.8)"><span>PEXPIREAT</span></a> 命令的效果一样。</p>
+<p>举个例子，从 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/expire.html#expire" title="(in Redis 命令参考 v2.8)"><span>EXPIRE</span></a> 命令到 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/pexpireat.html#pexpireat" title="(in Redis 命令参考 v2.8)"><span>PEXPIREAT</span></a> 命令的转换可以用伪代码表示如下：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">EXPIRE</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">sec</span><span class="p">):</span>
 
     <span class="c"># 将 TTL 从秒转换为毫秒</span>
@@ -964,7 +964,7 @@
 <span id="id23"></span><h2>数据库空间的收缩和扩展<a class="headerlink" href="#db-expand-and-shrink" title="Permalink to this headline">¶</a></h2>
 <p>因为数据库空间是由字典来实现的，
 所以数据库空间的扩展/收缩规则和字典的扩展/收缩规则完全一样，
-具体的信息可以参考《<a class="reference internal" href="../internal-datastruct/dict.html#dict-chapter"><em>字典</em></a>》章节。</p>
+具体的信息可以参考《<a class="reference internal" href="../internal-datastruct/dict.html#dict-chapter"><span>字典</span></a>》章节。</p>
 <p>因为对字典进行收缩的时机是由使用字典的程序决定的，
 所以 Redis 使用 <code class="docutils literal"><span class="pre">redis.c/tryResizeHashTables</span></code> 函数来检查数据库所使用的字典是否需要进行收缩：
 每次 <code class="docutils literal"><span class="pre">redis.c/serverCron</span></code> 函数运行的时候，
@@ -1055,7 +1055,7 @@
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

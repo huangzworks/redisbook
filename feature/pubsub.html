@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="Lua 脚本" href="scripting.html" />
     <link rel="prev" title="事务" href="transaction.html" /> 
@@ -60,14 +60,14 @@
             
   <div class="section" id="id1">
 <h1>订阅与发布<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
-<p>Redis 通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><em>SUBSCRIBE</em></a> 等命令实现了订阅与发布模式，
+<p>Redis 通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><span>SUBSCRIBE</span></a> 等命令实现了订阅与发布模式，
 这个功能提供两种信息机制，
 分别是订阅/发布到频道和订阅/发布到模式，
 下文先讨论订阅/发布到频道的实现，
 再讨论订阅/发布到模式的实现。</p>
 <div class="section" id="id2">
 <h2>频道的订阅与信息发送<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
-<p>Redis 的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><em>SUBSCRIBE</em></a> 命令可以让客户端订阅任意数量的频道，
+<p>Redis 的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><span>SUBSCRIBE</span></a> 命令可以让客户端订阅任意数量的频道，
 每当有新信息发送到被订阅的频道时，
 信息就会被发送给所有订阅指定频道的客户端。</p>
 <p>作为例子，
@@ -95,7 +95,7 @@
     client1 -&gt; channel1 [label = &quot;subscribe&quot;];
 }" />
 </p>
-<p>当有新消息通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 命令发送给频道 <code class="docutils literal"><span class="pre">channel1</span></code> 时，
+<p>当有新消息通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 命令发送给频道 <code class="docutils literal"><span class="pre">channel1</span></code> 时，
 这个消息就会被发送给订阅它的三个客户端：</p>
 <p class="graphviz">
 <img src="../_images/graphviz-84c95abf88d6c0ac55b007da08805a4b9a582fdf.svg" alt="digraph send_message_to_subscriber {
@@ -128,7 +128,7 @@
 }" />
 </p>
 <p>在后面的内容中，
-我们将探讨 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><em>SUBSCRIBE</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 命令的实现，
+我们将探讨 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><span>SUBSCRIBE</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 命令的实现，
 以及这套订阅与发布机制的运作原理。</p>
 </div>
 <div class="section" id="id3">
@@ -192,7 +192,7 @@
     client6 -&gt; null_3;
 }" />
 </p>
-<p>当客户端调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><em>SUBSCRIBE</em></a> 命令时，
+<p>当客户端调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><span>SUBSCRIBE</span></a> 命令时，
 程序就将客户端和要订阅的频道在 <code class="docutils literal"><span class="pre">pubsub_channels</span></code> 字典中关联起来。</p>
 <p>举个例子，如果客户端 <code class="docutils literal"><span class="pre">client10086</span></code> 执行命令 <code class="docutils literal"><span class="pre">SUBSCRIBE</span> <span class="pre">channel1</span> <span class="pre">channel2</span> <span class="pre">channel3</span></code> ，那么前面展示的 <code class="docutils literal"><span class="pre">pubsub_channels</span></code> 将变成下面这个样子：</p>
 <p class="graphviz">
@@ -245,7 +245,7 @@
     client10086_2 -&gt; null_3;
 }" />
 </p>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><em>SUBSCRIBE</em></a> 命令的行为可以用伪代码表示如下：</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/subscribe.html#subscribe" title="(in Redis 命令参考 v2.8)"><span>SUBSCRIBE</span></a> 命令的行为可以用伪代码表示如下：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">SUBSCRIBE</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">channels</span><span class="p">):</span>
 
     <span class="c"># 遍历所有输入频道</span>
@@ -264,7 +264,7 @@
 <div class="section" id="id4">
 <h2>发送信息到频道<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
 <p>了解了 <code class="docutils literal"><span class="pre">pubsub_channels</span></code> 字典的结构之后，
-解释 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 命令的实现就非常简单了：
+解释 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 命令的实现就非常简单了：
 当调用 <code class="docutils literal"><span class="pre">PUBLISH</span> <span class="pre">channel</span> <span class="pre">message</span></code> 命令，
 程序首先根据 <code class="docutils literal"><span class="pre">channel</span></code> 定位到字典的键，
 然后将信息发送给字典值链表中的所有客户端。</p>
@@ -314,7 +314,7 @@
     client6 -&gt; null_3;
 }" />
 </p>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 命令的实现可以用以下伪代码来描述：</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 命令的实现可以用以下伪代码来描述：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">PUBLISH</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">message</span><span class="p">):</span>
 
     <span class="c"># 遍历所有订阅频道 channel 的客户端</span>
@@ -327,7 +327,7 @@
 </div>
 <div class="section" id="id5">
 <h2>退订频道<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
-<p>使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/unsubscribe.html#unsubscribe" title="(in Redis 命令参考 v2.8)"><em>UNSUBSCRIBE</em></a> 命令可以退订指定的频道，
+<p>使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/unsubscribe.html#unsubscribe" title="(in Redis 命令参考 v2.8)"><span>UNSUBSCRIBE</span></a> 命令可以退订指定的频道，
 这个命令执行的是订阅的反操作：
 它从 <code class="docutils literal"><span class="pre">pubsub_channels</span></code> 字典的给定频道（键）中，
 删除关于当前客户端的信息，
@@ -335,7 +335,7 @@
 </div>
 <div class="section" id="id6">
 <h2>模式的订阅与信息发送<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
-<p>当使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 命令发送信息到某个频道时，
+<p>当使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 命令发送信息到某个频道时，
 不仅所有订阅该频道的客户端会收到信息，
 如果有某个/某些模式和这个频道匹配的话，
 那么所有订阅这个/这些频道的客户端也同样会收到信息。</p>
@@ -559,10 +559,10 @@
 </div>
 <div class="section" id="id8">
 <h2>发送信息到模式<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
-<p>发送信息到模式的工作也是由 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 命令进行的，
+<p>发送信息到模式的工作也是由 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 命令进行的，
 在前面讲解频道的时候，
 我们给出了这样一段伪代码，
-说它定义了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 命令的行为：</p>
+说它定义了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 命令的行为：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">PUBLISH</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">message</span><span class="p">):</span>
 
     <span class="c"># 遍历所有订阅频道 channel 的客户端</span>
@@ -572,12 +572,12 @@
         <span class="n">send_message</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">message</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>但是，这段伪代码并没有完整描述 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 命令的行为，
-因为 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 除了将 <code class="docutils literal"><span class="pre">message</span></code> 发送到所有订阅 <code class="docutils literal"><span class="pre">channel</span></code> 的客户端之外，
+<p>但是，这段伪代码并没有完整描述 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 命令的行为，
+因为 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 除了将 <code class="docutils literal"><span class="pre">message</span></code> 发送到所有订阅 <code class="docutils literal"><span class="pre">channel</span></code> 的客户端之外，
 它还会将 <code class="docutils literal"><span class="pre">channel</span></code> 和 <code class="docutils literal"><span class="pre">pubsub_patterns</span></code> 中的模式进行对比，
 如果 <code class="docutils literal"><span class="pre">channel</span></code> 和某个模式匹配的话，
 那么也将 <code class="docutils literal"><span class="pre">message</span></code> 发送到订阅那个模式的客户端。</p>
-<p>完整描述 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><em>PUBLISH</em></a> 功能的伪代码定于如下：</p>
+<p>完整描述 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/publish.html#publish" title="(in Redis 命令参考 v2.8)"><span>PUBLISH</span></a> 功能的伪代码定于如下：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">PUBLISH</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">message</span><span class="p">):</span>
 
     <span class="c"># 遍历所有订阅频道 channel 的客户端</span>
@@ -626,7 +626,7 @@
 </div>
 <div class="section" id="id9">
 <h2>退订模式<a class="headerlink" href="#id9" title="Permalink to this headline">¶</a></h2>
-<p>使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/punsubscribe.html#punsubscribe" title="(in Redis 命令参考 v2.8)"><em>PUNSUBSCRIBE</em></a> 命令可以退订指定的模式，
+<p>使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/pub_sub/punsubscribe.html#punsubscribe" title="(in Redis 命令参考 v2.8)"><span>PUNSUBSCRIBE</span></a> 命令可以退订指定的模式，
 这个命令执行的是订阅模式的反操作：
 程序会删除 <code class="docutils literal"><span class="pre">redisServer.pubsub_patterns</span></code> 链表中，
 所有和被退订模式相关联的 <code class="docutils literal"><span class="pre">pubsubPattern</span></code> 结构，
@@ -689,7 +689,7 @@
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="慢查询日志" href="slowlog.html" />
     <link rel="prev" title="订阅与发布" href="pubsub.html" /> 
@@ -67,7 +67,7 @@ Redis 解决了长久以来不能高效地处理 CAS （check-and-set）命令�
 轻松实现以前很难实现或者不能高效实现的模式。</p>
 <p>本章先介绍 Lua 环境的初始化步骤，
 然后对 Lua 脚本的安全性问题、以及解决这些问题的方法进行说明，
-最后对执行 Lua 脚本的两个命令 —— <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><em>EVALSHA</em></a> 的实现原理进行介绍。</p>
+最后对执行 Lua 脚本的两个命令 —— <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><span>EVALSHA</span></a> 的实现原理进行介绍。</p>
 <div class="section" id="id1">
 <h2>初始化 Lua 环境<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h2>
 <p>在初始化 Redis 服务器时，
@@ -148,7 +148,7 @@ Redis 需要解决这样一个问题：
 </pre></div>
 </div>
 <p>现在，
-假如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 的代码被复制到了附属节点 SLAVE ，
+假如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 的代码被复制到了附属节点 SLAVE ，
 因为 <code class="docutils literal"><span class="pre">get_random_number()</span></code> 的随机性质，
 它有很大可能会生成一个和 <code class="docutils literal"><span class="pre">10086</span></code> 完全不同的值，
 比如 <code class="docutils literal"><span class="pre">65535</span></code> ：</p>
@@ -189,8 +189,8 @@ Redis 对 Lua 环境所能执行的脚本做了一个严格的限制 ——
 <ul class="simple">
 <li>不提供访问系统状态状态的库（比如系统时间库）。</li>
 <li>禁止使用 <a class="reference external" href="http://pgl.yoyo.org/luai/i/loadfile">loadfile</a> 函数。</li>
-<li>如果脚本在执行带有随机性质的命令（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/randomkey.html#randomkey" title="(in Redis 命令参考 v2.8)"><em>RANDOMKEY</em></a> ），或者带有副作用的命令（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/time.html#time" title="(in Redis 命令参考 v2.8)"><em>TIME</em></a> ）之后，试图执行一个写入命令（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> ），那么 Redis 将阻止这个脚本继续运行，并返回一个错误。</li>
-<li>如果脚本执行了带有随机性质的读命令（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/smembers.html#smembers" title="(in Redis 命令参考 v2.8)"><em>SMEMBERS</em></a> ），那么在脚本的输出返回给 Redis 之前，会先被执行一个自动的<a class="reference external" href="http://en.wikipedia.org/wiki/Lexicographical_order">字典序排序</a>，从而确保输出结果是有序的。</li>
+<li>如果脚本在执行带有随机性质的命令（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/randomkey.html#randomkey" title="(in Redis 命令参考 v2.8)"><span>RANDOMKEY</span></a> ），或者带有副作用的命令（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/time.html#time" title="(in Redis 命令参考 v2.8)"><span>TIME</span></a> ）之后，试图执行一个写入命令（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><span>SET</span></a> ），那么 Redis 将阻止这个脚本继续运行，并返回一个错误。</li>
+<li>如果脚本执行了带有随机性质的读命令（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/smembers.html#smembers" title="(in Redis 命令参考 v2.8)"><span>SMEMBERS</span></a> ），那么在脚本的输出返回给 Redis 之前，会先被执行一个自动的<a class="reference external" href="http://en.wikipedia.org/wiki/Lexicographical_order">字典序排序</a>，从而确保输出结果是有序的。</li>
 <li>用 Redis 自己定义的随机生成函数，替换 Lua 环境中 <code class="docutils literal"><span class="pre">math</span></code> 表原有的 <a class="reference external" href="http://pgl.yoyo.org/luai/i/math.random">math.random</a> 函数和 <a class="reference external" href="http://pgl.yoyo.org/luai/i/math.randomseed">math.randomseed</a> 函数，新的函数具有这样的性质：每次执行 Lua 脚本时，除非显式地调用 <code class="docutils literal"><span class="pre">math.randomseed</span></code> ，否则 <code class="docutils literal"><span class="pre">math.random</span></code> 生成的伪随机数序列总是相同的。</li>
 </ul>
 <p>经过这一系列的调整之后，
@@ -204,15 +204,15 @@ Redis 可以保证被执行的脚本：</p>
 <div class="section" id="id5">
 <h2>脚本的执行<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
 <p>在脚本环境的初始化工作完成以后，
-Redis 就可以通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 命令或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><em>EVALSHA</em></a> 命令执行 Lua 脚本了。</p>
+Redis 就可以通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 命令或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><span>EVALSHA</span></a> 命令执行 Lua 脚本了。</p>
 <p>其中，
-<a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 直接对输入的脚本代码体（body）进行求值：</p>
+<a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 直接对输入的脚本代码体（body）进行求值：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">EVAL</span> <span class="s">&quot;return &#39;hello world&#39;&quot;</span> <span class="mi">0</span>
 <span class="s">&quot;hello world&quot;</span>
 </pre></div>
 </div>
-<p>而 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><em>EVALSHA</em></a> 则要求输入某个脚本的 SHA1 校验和，
-这个校验和所对应的脚本必须至少被 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 执行过一次：</p>
+<p>而 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><span>EVALSHA</span></a> 则要求输入某个脚本的 SHA1 校验和，
+这个校验和所对应的脚本必须至少被 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 执行过一次：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">EVAL</span> <span class="s">&quot;return &#39;hello world&#39;&quot;</span> <span class="mi">0</span>
 <span class="s">&quot;hello world&quot;</span>
 
@@ -220,7 +220,7 @@ Redis 就可以通过 <a class="reference external" href="http://redis.readthedo
 <span class="s">&quot;hello world&quot;</span>
 </pre></div>
 </div>
-<p>或者曾经使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/script_load.html#script-load" title="(in Redis 命令参考 v2.8)"><em>SCRIPT LOAD</em></a> 载入过这个脚本：</p>
+<p>或者曾经使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/script_load.html#script-load" title="(in Redis 命令参考 v2.8)"><span>SCRIPT LOAD</span></a> 载入过这个脚本：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">SCRIPT</span> <span class="n">LOAD</span> <span class="s">&quot;return &#39;dlrow olleh&#39;&quot;</span>
 <span class="s">&quot;d569c48906b1f4fca0469ba4eee89149b5148092&quot;</span>
 
@@ -228,13 +228,13 @@ Redis 就可以通过 <a class="reference external" href="http://redis.readthedo
 <span class="s">&quot;dlrow olleh&quot;</span>
 </pre></div>
 </div>
-<p>因为 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><em>EVALSHA</em></a> 是基于 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 构建的，
-所以下文先用一节讲解 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 的实现，
-之后再讲解 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><em>EVALSHA</em></a> 的实现。</p>
+<p>因为 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><span>EVALSHA</span></a> 是基于 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 构建的，
+所以下文先用一节讲解 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 的实现，
+之后再讲解 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><span>EVALSHA</span></a> 的实现。</p>
 </div>
 <div class="section" id="eval">
 <h2>EVAL 命令的实现<a class="headerlink" href="#eval" title="Permalink to this headline">¶</a></h2>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 命令的执行可以分为以下步骤：</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 命令的执行可以分为以下步骤：</p>
 <ol class="arabic simple">
 <li>为输入脚本定义一个 Lua 函数。</li>
 <li>执行这个 Lua 函数。</li>
@@ -244,7 +244,7 @@ Redis 就可以通过 <a class="reference external" href="http://redis.readthedo
 <span id="id6"></span><h3>定义 Lua 函数<a class="headerlink" href="#define-lua-function" title="Permalink to this headline">¶</a></h3>
 <p>所有被 Redis 执行的 Lua 脚本，
 在 Lua 环境中都会有一个和该脚本相对应的无参数函数：
-当调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 命令执行脚本时，
+当调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 命令执行脚本时，
 程序第一步要完成的工作就是为传入的脚本创建一个相应的 Lua 函数。</p>
 <p>举个例子，
 当执行命令 <code class="docutils literal"><span class="pre">EVAL</span> <span class="pre">&quot;return</span> <span class="pre">'hello</span> <span class="pre">world'&quot;</span> <span class="pre">0</span></code> 时，
@@ -262,7 +262,7 @@ Lua 会为脚本 <code class="docutils literal"><span class="pre">&quot;return</
 <ul class="simple">
 <li>执行脚本的步骤非常简单，只要调用和脚本相对应的函数即可。</li>
 <li>Lua 环境可以保持清洁，已有的脚本和新加入的脚本不会互相干扰，也可以将重置 Lua 环境和调用 Lua GC 的次数降到最低。</li>
-<li>如果某个脚本所对应的函数在 Lua 环境中被定义过至少一次，那么只要记得这个脚本的 SHA1 校验和，就可以直接执行该脚本 —— 这是实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><em>EVALSHA</em></a> 命令的基础，稍后在介绍 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><em>EVALSHA</em></a> 的时候就会说到这一点。</li>
+<li>如果某个脚本所对应的函数在 Lua 环境中被定义过至少一次，那么只要记得这个脚本的 SHA1 校验和，就可以直接执行该脚本 —— 这是实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><span>EVALSHA</span></a> 命令的基础，稍后在介绍 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><span>EVALSHA</span></a> 的时候就会说到这一点。</li>
 </ul>
 <p>在为脚本创建函数前，程序会先用函数名检查 Lua 环境，只有在函数定义未存在时，程序才创建函数。重复定义函数一般并没有什么副作用，这算是一个小优化。</p>
 <p>另外，如果定义的函数在编译过程中出错（比如，脚本的代码语法有错），
@@ -279,7 +279,7 @@ Lua 会为脚本 <code class="docutils literal"><span class="pre">&quot;return</
 还需要执行一些设置钩子、传入参数之类的操作，
 整个执行函数的过程如下：</p>
 <ol class="arabic simple">
-<li>将 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 命令中输入的 <code class="docutils literal"><span class="pre">KEYS</span></code> 参数和 <code class="docutils literal"><span class="pre">ARGV</span></code> 参数以全局数组的方式传入到 Lua 环境中。</li>
+<li>将 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 命令中输入的 <code class="docutils literal"><span class="pre">KEYS</span></code> 参数和 <code class="docutils literal"><span class="pre">ARGV</span></code> 参数以全局数组的方式传入到 Lua 环境中。</li>
 <li>设置伪客户端的目标数据库为调用者客户端的目标数据库： <code class="docutils literal"><span class="pre">fake_client-&gt;db</span> <span class="pre">=</span> <span class="pre">caller_client-&gt;db</span></code> ，确保脚本中执行的 Redis 命令访问的是正确的数据库。</li>
 <li>为 Lua 环境装载超时钩子，保证在脚本执行出现超时时可以杀死脚本，或者停止 Redis 服务器。</li>
 <li>执行脚本对应的 Lua 函数。</li>
@@ -365,7 +365,7 @@ Lua 和伪客户端的交互趟数也会相应地增多，
 </div>
 <div class="section" id="evalsha">
 <h2>EVALSHA 命令的实现<a class="headerlink" href="#evalsha" title="Permalink to this headline">¶</a></h2>
-<p>前面介绍 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 命令的实现时说过，
+<p>前面介绍 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 命令的实现时说过，
 每个被执行过的 Lua 脚本，
 在 Lua 环境中都有一个和它相对应的函数，
 函数的名字由 <code class="docutils literal"><span class="pre">f_</span></code> 前缀加上 40 个字符长的 SHA1 校验和构成：
@@ -374,7 +374,7 @@ Lua 和伪客户端的交互趟数也会相应地增多，
 那么即使用户不知道脚本的内容本身，
 也可以直接通过脚本的 SHA1 校验和来调用脚本所对应的函数，
 从而达到执行脚本的目的 ——
-这就是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><em>EVALSHA</em></a> 命令的实现原理。</p>
+这就是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><span>EVALSHA</span></a> 命令的实现原理。</p>
 <p>可以用伪代码来描述这一原理：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">EVALSHA</span><span class="p">(</span><span class="n">sha1</span><span class="p">):</span>
 
@@ -393,8 +393,8 @@ Lua 和伪客户端的交互趟数也会相应地增多，
         <span class="k">return</span> <span class="n">script_error</span><span class="p">(</span><span class="s">&quot;SCRIPT NOT FOUND&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>除了执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 命令之外，
-<a class="reference external" href="http://redis.readthedocs.org/en/latest/script/script_load.html#script-load" title="(in Redis 命令参考 v2.8)"><em>SCRIPT LOAD</em></a> 命令也可以为脚本在 Lua 环境中创建函数：</p>
+<p>除了执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 命令之外，
+<a class="reference external" href="http://redis.readthedocs.org/en/latest/script/script_load.html#script-load" title="(in Redis 命令参考 v2.8)"><span>SCRIPT LOAD</span></a> 命令也可以为脚本在 Lua 环境中创建函数：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">SCRIPT</span> <span class="n">LOAD</span> <span class="s">&quot;return &#39;hello world&#39;&quot;</span>
 <span class="s">&quot;5332031c6b470dc5a0dd9b4bf2030dea6d65de91&quot;</span>
 
@@ -402,7 +402,7 @@ Lua 和伪客户端的交互趟数也会相应地增多，
 <span class="s">&quot;hello world&quot;</span>
 </pre></div>
 </div>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/script/script_load.html#script-load" title="(in Redis 命令参考 v2.8)"><em>SCRIPT LOAD</em></a> 执行的操作和前面《<a class="reference internal" href="#define-lua-function"><em>定义 Lua 函数</em></a>》小节描述的一样。</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/script/script_load.html#script-load" title="(in Redis 命令参考 v2.8)"><span>SCRIPT LOAD</span></a> 执行的操作和前面《<a class="reference internal" href="#define-lua-function"><span>定义 Lua 函数</span></a>》小节描述的一样。</p>
 </div>
 <div class="section" id="id8">
 <h2>小结<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
@@ -415,8 +415,8 @@ Lua 和伪客户端的交互趟数也会相应地增多，
 </ul>
 </li>
 <li>Reids 通过一系列措施保证被执行的 Lua 脚本无副作用，也没有有害的写随机性：对于同样的输入参数和数据集，总是产生相同的写入命令。</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><em>EVAL</em></a> 命令为输入脚本定义一个 Lua 函数，然后通过执行这个函数来执行脚本。</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><em>EVALSHA</em></a> 通过构建函数名，直接调用 Lua 中已定义的函数，从而执行相应的脚本。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/script/eval.html#eval" title="(in Redis 命令参考 v2.8)"><span>EVAL</span></a> 命令为输入脚本定义一个 Lua 函数，然后通过执行这个函数来执行脚本。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/script/evalsha.html#evalsha" title="(in Redis 命令参考 v2.8)"><span>EVALSHA</span></a> 通过构建函数名，直接调用 Lua 中已定义的函数，从而执行相应的脚本。</li>
 </ul>
 </div>
 </div>
@@ -466,7 +466,7 @@ Lua 和伪客户端的交互趟数也会相应地增多，
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

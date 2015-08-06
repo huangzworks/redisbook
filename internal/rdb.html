@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="AOF" href="aof.html" />
     <link rel="prev" title="数据库" href="db.html" /> 
@@ -89,7 +89,7 @@ RDB 程序可以通过载入 RDB 文件来还原数据库的状态。</p>
     rdb -&gt; redis_object [label = &quot;rdbLoad&quot;];
 }" />
 </p>
-<p>本章先介绍 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 命令的实现，
+<p>本章先介绍 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 命令的实现，
 以及 <code class="docutils literal"><span class="pre">rdbSave</span></code> 和 <code class="docutils literal"><span class="pre">rdbLoad</span></code> 两个函数的运行机制，
 然后以图表的方式，
 分部分来介绍 RDB 文件的组织形式。</p>
@@ -104,10 +104,10 @@ RDB 程序可以通过载入 RDB 文件来还原数据库的状态。</p>
 <p>在保存 RDB 文件期间，
 主进程会被阻塞，
 直到保存完成为止。</p>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 两个命令都会调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> 函数，但它们调用的方式各有不同：</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 两个命令都会调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> 函数，但它们调用的方式各有不同：</p>
 <ul class="simple">
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 直接调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，阻塞 Redis 主进程，直到保存完成为止。在主进程阻塞期间，服务器不能处理客户端的任何请求。</li>
-<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 则 <code class="docutils literal"><span class="pre">fork</span></code> 出一个子进程，子进程负责调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，并在保存完成之后向主进程发送信号，通知保存已完成。因为 <code class="docutils literal"><span class="pre">rdbSave</span></code> 在子进程被调用，所以 Redis 服务器在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 执行期间仍然可以继续处理客户端的请求。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 直接调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，阻塞 Redis 主进程，直到保存完成为止。在主进程阻塞期间，服务器不能处理客户端的任何请求。</li>
+<li><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 则 <code class="docutils literal"><span class="pre">fork</span></code> 出一个子进程，子进程负责调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，并在保存完成之后向主进程发送信号，通知保存已完成。因为 <code class="docutils literal"><span class="pre">rdbSave</span></code> 在子进程被调用，所以 Redis 服务器在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 执行期间仍然可以继续处理客户端的请求。</li>
 </ul>
 <p>通过伪代码来描述这两个命令，可以很容易地看出它们之间的区别：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="k">def</span> <span class="nf">SAVE</span><span class="p">():</span>
@@ -147,40 +147,40 @@ RDB 程序可以通过载入 RDB 文件来还原数据库的状态。</p>
 <div class="section" id="save">
 <h3>SAVE<a class="headerlink" href="#save" title="Permalink to this headline">¶</a></h3>
 <p>前面提到过，
-当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 执行时，
+当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 执行时，
 Redis 服务器是阻塞的，
-所以当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 正在执行时，
-新的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 调用都不会产生任何作用。</p>
-<p>只有在上一个 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 执行完毕、
+所以当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 正在执行时，
+新的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 调用都不会产生任何作用。</p>
+<p>只有在上一个 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 执行完毕、
 Redis 重新开始接受请求之后，
-新的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 命令才会被处理。</p>
+新的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 命令才会被处理。</p>
 <p>另外，
 因为 AOF 写入由后台线程完成，
-而 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 则由子进程完成，
-所以在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 执行的过程中，
-AOF 写入和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 可以同时进行。</p>
+而 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 则由子进程完成，
+所以在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 执行的过程中，
+AOF 写入和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 可以同时进行。</p>
 </div>
 <div class="section" id="bgsave">
 <h3>BGSAVE<a class="headerlink" href="#bgsave" title="Permalink to this headline">¶</a></h3>
-<p>在执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 命令之前，
-服务器会检查 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 是否正在执行当中，
+<p>在执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 命令之前，
+服务器会检查 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 是否正在执行当中，
 如果是的话，
 服务器就不调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，
 而是向客户端返回一个出错信息，
-告知在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 执行期间，
-不能执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 。</p>
-<p>这样做可以避免 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 调用的两个 <code class="docutils literal"><span class="pre">rdbSave</span></code> 交叉执行，
+告知在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 执行期间，
+不能执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 。</p>
+<p>这样做可以避免 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 调用的两个 <code class="docutils literal"><span class="pre">rdbSave</span></code> 交叉执行，
 造成竞争条件。</p>
 <p>另一方面，
-当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 正在执行时，
-调用新 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 命令的客户端会收到一个出错信息，
-告知 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 已经在执行当中。</p>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 不能同时执行：</p>
+当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 正在执行时，
+调用新 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 命令的客户端会收到一个出错信息，
+告知 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 已经在执行当中。</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 不能同时执行：</p>
 <ul class="simple">
-<li>如果 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 正在执行，那么 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 的重写请求会被延迟到 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 执行完毕之后进行，执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 命令的客户端会收到请求被延迟的回复。</li>
-<li>如果 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 正在执行，那么调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 的客户端将收到出错信息，表示这两个命令不能同时执行。</li>
+<li>如果 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 正在执行，那么 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 的重写请求会被延迟到 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 执行完毕之后进行，执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 命令的客户端会收到请求被延迟的回复。</li>
+<li>如果 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 正在执行，那么调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 的客户端将收到出错信息，表示这两个命令不能同时执行。</li>
 </ul>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 两个命令在操作方面并没有什么冲突的地方，
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 两个命令在操作方面并没有什么冲突的地方，
 不能同时执行它们只是一个性能方面的考虑：
 并发出两个子进程，
 并且两个子进程都同时进行大量的磁盘写入操作，
@@ -263,7 +263,7 @@ Redis 才会使用 RDB 文件来还原数据。</p>
 程序会使用不同的方式来保存和读取 <code class="docutils literal"><span class="pre">VALUE</span></code> 的值。</p>
 <div class="admonition note">
 <p class="first admonition-title">Note</p>
-<p class="last">下文提到的编码在《<a class="reference internal" href="../datatype/object.html#object-chapter"><em>对象处理机制</em></a>》章节介绍过，如果忘记了可以回去重温下。</p>
+<p class="last">下文提到的编码在《<a class="reference internal" href="../datatype/object.html#object-chapter"><span>对象处理机制</span></a>》章节介绍过，如果忘记了可以回去重温下。</p>
 </div>
 <p>保存 <code class="docutils literal"><span class="pre">VALUE</span></code> 的详细格式如下：</p>
 <ul>
@@ -400,13 +400,13 @@ Redis 才会使用 RDB 文件来还原数据。</p>
 <ul>
 <li><p class="first"><code class="docutils literal"><span class="pre">rdbSave</span></code> 会将数据库数据保存到 RDB 文件，并在保存完成之前阻塞调用者。</p>
 </li>
-<li><p class="first"><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 命令直接调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，阻塞 Redis 主进程； <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 用子进程调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，主进程仍可继续处理命令请求。</p>
+<li><p class="first"><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 命令直接调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，阻塞 Redis 主进程； <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 用子进程调用 <code class="docutils literal"><span class="pre">rdbSave</span></code> ，主进程仍可继续处理命令请求。</p>
 </li>
-<li><p class="first"><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 执行期间， AOF 写入可以在后台线程进行， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 可以在子进程进行，所以这三种操作可以同时进行。</p>
+<li><p class="first"><a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 执行期间， AOF 写入可以在后台线程进行， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 可以在子进程进行，所以这三种操作可以同时进行。</p>
 </li>
-<li><p class="first">为了避免产生竞争条件， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 执行时， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><em>SAVE</em></a> 命令不能执行。</p>
+<li><p class="first">为了避免产生竞争条件， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 执行时， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/save.html#save" title="(in Redis 命令参考 v2.8)"><span>SAVE</span></a> 命令不能执行。</p>
 </li>
-<li><p class="first">为了避免性能问题， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 不能同时执行。</p>
+<li><p class="first">为了避免性能问题， <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 不能同时执行。</p>
 </li>
 <li><p class="first">调用 <code class="docutils literal"><span class="pre">rdbLoad</span></code> 函数载入 RDB 文件时，不能进行任何和数据库相关的操作，不过订阅与发布方面的命令可以正常执行，因为它们和数据库不相关联。</p>
 </li>
@@ -476,7 +476,7 @@ Redis 才会使用 RDB 文件来还原数据。</p>
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="字典" href="dict.html" />
     <link rel="prev" title="简单动态字符串" href="sds.html" /> 
@@ -86,7 +86,7 @@ Redis 也不例外 —— 实现了一个双端链表结构。</p>
 <h3>实现 Redis 的列表类型<a class="headerlink" href="#redis" title="Permalink to this headline">¶</a></h3>
 <p>双端链表还是 Redis 列表类型的底层实现之一，
 当对列表类型的键进行操作 ——
-比如执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpush.html#rpush" title="(in Redis 命令参考 v2.8)"><em>RPUSH</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpop.html#lpop" title="(in Redis 命令参考 v2.8)"><em>LPOP</em></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/llen.html#llen" title="(in Redis 命令参考 v2.8)"><em>LLEN</em></a> 等命令时，
+比如执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpush.html#rpush" title="(in Redis 命令参考 v2.8)"><span>RPUSH</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpop.html#lpop" title="(in Redis 命令参考 v2.8)"><span>LPOP</span></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/llen.html#llen" title="(in Redis 命令参考 v2.8)"><span>LLEN</span></a> 等命令时，
 程序在底层操作的可能就是双端链表。</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">RPUSH</span> <span class="n">brands</span> <span class="n">Apple</span> <span class="n">Microsoft</span> <span class="n">Google</span>
 <span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">3</span>
@@ -204,8 +204,8 @@ Redis 也不例外 —— 实现了一个双端链表结构。</p>
 <p>另外，从这两个数据结构的定义上，也可以了解到一些行为和性能特征：</p>
 <ul class="simple">
 <li><code class="docutils literal"><span class="pre">listNode</span></code> 带有 <code class="docutils literal"><span class="pre">prev</span></code> 和 <code class="docutils literal"><span class="pre">next</span></code> 两个指针，因此，遍历可以双向进行：从表头到表尾，表尾到表头。</li>
-<li><code class="docutils literal"><span class="pre">list</span></code> 保存了 <code class="docutils literal"><span class="pre">head</span></code> 和 <code class="docutils literal"><span class="pre">tail</span></code> 两个指针，因此，对链表的表头和表尾进行插入的复杂度都为 <span class="math">\(\theta(1)\)</span> —— 这是高效实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><em>LPUSH</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpop.html#rpop" title="(in Redis 命令参考 v2.8)"><em>RPOP</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpoplpush.html#rpoplpush" title="(in Redis 命令参考 v2.8)"><em>RPOPLPUSH</em></a> 等命令的关键。</li>
-<li><code class="docutils literal"><span class="pre">list</span></code> 带有保存节点数量的 <code class="docutils literal"><span class="pre">len</span></code> 属性，所以计算链表长度的复杂度仅为 <span class="math">\(\theta(1)\)</span> ，这也保证了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/llen.html#llen" title="(in Redis 命令参考 v2.8)"><em>LLEN</em></a> 命令不会成为性能瓶颈。</li>
+<li><code class="docutils literal"><span class="pre">list</span></code> 保存了 <code class="docutils literal"><span class="pre">head</span></code> 和 <code class="docutils literal"><span class="pre">tail</span></code> 两个指针，因此，对链表的表头和表尾进行插入的复杂度都为 <span class="math">\(\theta(1)\)</span> —— 这是高效实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><span>LPUSH</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpop.html#rpop" title="(in Redis 命令参考 v2.8)"><span>RPOP</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpoplpush.html#rpoplpush" title="(in Redis 命令参考 v2.8)"><span>RPOPLPUSH</span></a> 等命令的关键。</li>
+<li><code class="docutils literal"><span class="pre">list</span></code> 带有保存节点数量的 <code class="docutils literal"><span class="pre">len</span></code> 属性，所以计算链表长度的复杂度仅为 <span class="math">\(\theta(1)\)</span> ，这也保证了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/llen.html#llen" title="(in Redis 命令参考 v2.8)"><span>LLEN</span></a> 命令不会成为性能瓶颈。</li>
 </ul>
 <p>以下是用于操作双端链表的 API ，它们的作用以及算法复杂度：</p>
 <table border="1" class="docutils">
@@ -414,7 +414,7 @@ Redis 也不例外 —— 实现了一个双端链表结构。</p>
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

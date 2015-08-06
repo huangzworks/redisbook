@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="事件" href="ae.html" />
     <link rel="prev" title="RDB" href="rdb.html" /> 
@@ -183,7 +183,7 @@ $1
 1
 </pre></div>
 </div>
-<p>除了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/connection/select.html#select" title="(in Redis 命令参考 v2.8)"><em>SELECT</em></a> 命令是 AOF 程序自己加上去的之外，
+<p>除了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/connection/select.html#select" title="(in Redis 命令参考 v2.8)"><span>SELECT</span></a> 命令是 AOF 程序自己加上去的之外，
 其他命令都是之前我们在终端里执行的命令。</p>
 <p>同步命令到 AOF 文件的整个过程可以分为三个阶段：</p>
 <ol class="arabic simple">
@@ -206,8 +206,8 @@ $1
 选择适当的命令函数，
 并将各个参数从字符串文本转换为 Redis 字符串对象（<code class="docutils literal"><span class="pre">StringObject</span></code>）。</p>
 <p>比如说，
-针对上面的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 命令例子，
-Redis 将客户端的命令指针指向实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 命令的 <code class="docutils literal"><span class="pre">setCommand</span></code> 函数，
+针对上面的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><span>SET</span></a> 命令例子，
+Redis 将客户端的命令指针指向实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><span>SET</span></a> 命令的 <code class="docutils literal"><span class="pre">setCommand</span></code> 函数，
 并创建三个 Redis 字符串对象，
 分别保存 <code class="docutils literal"><span class="pre">SET</span></code> 、 <code class="docutils literal"><span class="pre">KEY</span></code> 和 <code class="docutils literal"><span class="pre">VALUE</span></code> 三个参数（命令也算作参数）。</p>
 <p>每当命令函数成功执行之后，
@@ -822,11 +822,11 @@ Redis 主进程在接到新的写命令之后，
 AOF 后台重写都不会对主进程造成阻塞，
 这将 AOF 重写对性能造成的影响降到了最低。</p>
 <p>以上就是 AOF 后台重写，
-也即是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 命令的工作原理。</p>
+也即是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 命令的工作原理。</p>
 </div>
 <div class="section" id="id14">
 <h2>AOF 后台重写的触发条件<a class="headerlink" href="#id14" title="Permalink to this headline">¶</a></h2>
-<p>AOF 重写可以由用户通过调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 手动触发。</p>
+<p>AOF 重写可以由用户通过调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 手动触发。</p>
 <p>另外，
 服务器在 AOF 功能开启的情况下，
 会维持以下三个变量：</p>
@@ -840,8 +840,8 @@ AOF 后台重写都不会对主进程造成阻塞，
 如果是的话，
 就会触发自动的 AOF 重写：</p>
 <ol class="arabic simple">
-<li>没有 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><em>BGSAVE</em></a> 命令在进行。</li>
-<li>没有 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><em>BGREWRITEAOF</em></a> 在进行。</li>
+<li>没有 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgsave.html#bgsave" title="(in Redis 命令参考 v2.8)"><span>BGSAVE</span></a> 命令在进行。</li>
+<li>没有 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/bgrewriteaof.html#bgrewriteaof" title="(in Redis 命令参考 v2.8)"><span>BGREWRITEAOF</span></a> 在进行。</li>
 <li>当前 AOF 文件大小大于 <code class="docutils literal"><span class="pre">server.aof_rewrite_min_size</span></code> （默认值为 1 MB）。</li>
 <li>当前 AOF 文件大小和最后一次 AOF 重写后的大小之间的比率大于等于指定的增长百分比。</li>
 </ol>
@@ -910,7 +910,7 @@ AOF 后台重写都不会对主进程造成阻塞，
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

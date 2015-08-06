@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="集合" href="set.html" />
     <link rel="prev" title="哈希表" href="hash.html" /> 
@@ -60,7 +60,7 @@
             
   <div class="section" id="list-chapter">
 <span id="id1"></span><h1>列表<a class="headerlink" href="#list-chapter" title="Permalink to this headline">¶</a></h1>
-<p><code class="docutils literal"><span class="pre">REDIS_LIST</span></code> （列表）是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><em>LPUSH</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lrange.html#lrange" title="(in Redis 命令参考 v2.8)"><em>LRANGE</em></a> 等命令的操作对象，
+<p><code class="docutils literal"><span class="pre">REDIS_LIST</span></code> （列表）是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><span>LPUSH</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lrange.html#lrange" title="(in Redis 命令参考 v2.8)"><span>LRANGE</span></a> 等命令的操作对象，
 它使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 和 <code class="docutils literal"><span class="pre">REDIS_ENCODING_LINKEDLIST</span></code> 这两种方式编码：</p>
 <p class="graphviz">
 <img src="../_images/graphviz-9d1b937227cf948b8a9bfb3137570475e5407d2c.svg" alt="digraph redis_list {
@@ -113,18 +113,18 @@
 <p>既然这些映射都非常直观，
 这里就不做赘述了，
 在以下的内容中，
-我们将焦点放在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><em>BLPOP</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpop.html#brpop" title="(in Redis 命令参考 v2.8)"><em>BRPOP</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpoplpush.html#brpoplpush" title="(in Redis 命令参考 v2.8)"><em>BRPOPLPUSH</em></a> 这个几个阻塞命令的实现原理上。</p>
+我们将焦点放在 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><span>BLPOP</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpop.html#brpop" title="(in Redis 命令参考 v2.8)"><span>BRPOP</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpoplpush.html#brpoplpush" title="(in Redis 命令参考 v2.8)"><span>BRPOPLPUSH</span></a> 这个几个阻塞命令的实现原理上。</p>
 </div>
 <div class="section" id="id4">
 <h2>阻塞的条件<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h2>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><em>BLPOP</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpop.html#brpop" title="(in Redis 命令参考 v2.8)"><em>BRPOP</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpoplpush.html#brpoplpush" title="(in Redis 命令参考 v2.8)"><em>BRPOPLPUSH</em></a> 三个命令都可能造成客户端被阻塞，
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><span>BLPOP</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpop.html#brpop" title="(in Redis 命令参考 v2.8)"><span>BRPOP</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/brpoplpush.html#brpoplpush" title="(in Redis 命令参考 v2.8)"><span>BRPOPLPUSH</span></a> 三个命令都可能造成客户端被阻塞，
 以下将这些命令统称为列表的阻塞原语。</p>
 <p>阻塞原语并不是一定会造成客户端阻塞：</p>
 <ul class="simple">
 <li>只有当这些命令被用于空列表时， 它们才会阻塞客户端。</li>
-<li>如果被处理的列表不为空的话， 它们就执行无阻塞版本的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpop.html#lpop" title="(in Redis 命令参考 v2.8)"><em>LPOP</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpop.html#rpop" title="(in Redis 命令参考 v2.8)"><em>RPOP</em></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpoplpush.html#rpoplpush" title="(in Redis 命令参考 v2.8)"><em>RPOPLPUSH</em></a> 命令。</li>
+<li>如果被处理的列表不为空的话， 它们就执行无阻塞版本的 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpop.html#lpop" title="(in Redis 命令参考 v2.8)"><span>LPOP</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpop.html#rpop" title="(in Redis 命令参考 v2.8)"><span>RPOP</span></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpoplpush.html#rpoplpush" title="(in Redis 命令参考 v2.8)"><span>RPOPLPUSH</span></a> 命令。</li>
 </ul>
-<p>作为例子，以下流程图展示了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><em>BLPOP</em></a> 决定是否对客户端进行阻塞过程：</p>
+<p>作为例子，以下流程图展示了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/blpop.html#blpop" title="(in Redis 命令参考 v2.8)"><span>BLPOP</span></a> 决定是否对客户端进行阻塞过程：</p>
 <p class="graphviz">
 <img src="../_images/graphviz-657d8e78e1f1357fdff05173a259334670b87f85.svg" alt="digraph blpop_decide_block_or_not {
 
@@ -236,7 +236,7 @@
 <p>通过将新元素推入造成客户端阻塞的某个键中，
 可以让相应的客户端从阻塞状态中脱离出来
 （取消阻塞的客户端数量取决于推入元素的数量）。</p>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><em>LPUSH</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpush.html#rpush" title="(in Redis 命令参考 v2.8)"><em>RPUSH</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/linsert.html#linsert" title="(in Redis 命令参考 v2.8)"><em>LINSERT</em></a> 这三个添加新元素到列表的命令，
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><span>LPUSH</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/rpush.html#rpush" title="(in Redis 命令参考 v2.8)"><span>RPUSH</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/linsert.html#linsert" title="(in Redis 命令参考 v2.8)"><span>LINSERT</span></a> 这三个添加新元素到列表的命令，
 在底层都由一个 <code class="docutils literal"><span class="pre">pushGenericCommand</span></code> 的函数实现，
 这个函数的运作流程如下图：</p>
 <p class="graphviz">
@@ -579,7 +579,7 @@ Redis 文档称这种模式为先阻塞先服务（FBFS，first-block-first-serv
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

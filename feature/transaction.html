@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="订阅与发布" href="pubsub.html" />
     <link rel="prev" title="有序集" href="../datatype/sorted_set.html" /> 
@@ -60,9 +60,9 @@
             
   <div class="section" id="id1">
 <h1>事务<a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h1>
-<p>Redis 通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><em>DISCARD</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a> 四个命令来实现事务功能，
-本章首先讨论使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><em>DISCARD</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 三个命令实现的一般事务，
-然后再来讨论带有 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a> 的事务的实现。</p>
+<p>Redis 通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><span>DISCARD</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a> 四个命令来实现事务功能，
+本章首先讨论使用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><span>DISCARD</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 三个命令实现的一般事务，
+然后再来讨论带有 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a> 的事务的实现。</p>
 <p>因为事务的安全性也非常重要，
 所以本章最后通过常见的 ACID 性质对 Redis 事务的安全性进行了说明。</p>
 <div class="section" id="id2">
@@ -73,9 +73,9 @@
 服务器在执行完事务中的所有命令之后，
 才会继续处理其他客户端的其他命令。</p>
 <p>以下是一个事务的例子，
-它先以 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 开始一个事务，
+它先以 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 开始一个事务，
 然后将多个命令入队到事务中，
-最后由 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 命令触发事务，
+最后由 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 命令触发事务，
 一并执行事务中的所有命令：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">MULTI</span>
 <span class="n">OK</span>
@@ -111,7 +111,7 @@
 </div>
 <div class="section" id="id3">
 <h2>开始事务<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h2>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 命令的执行标记着事务的开始：</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 命令的执行标记着事务的开始：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">MULTI</span>
 <span class="n">OK</span>
 </pre></div>
@@ -269,7 +269,7 @@
 当客户端进入事务状态之后，
 客户端发送的命令就会被放进事务队列里。</p>
 <p>但其实并不是所有的命令都会被放进事务队列，
-其中的例外就是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><em>DISCARD</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a> 这四个命令 ——
+其中的例外就是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><span>DISCARD</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a> 这四个命令 ——
 当这四个命令从客户端发送到服务器时，
 它们会像客户端处于非事务状态一样，
 直接被服务器执行：</p>
@@ -312,7 +312,7 @@
 }" />
 </p>
 <p>如果客户端正处于事务状态，
-那么当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 命令执行时，
+那么当 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 命令执行时，
 服务器根据客户端所保存的事务队列，
 以先进先出（FIFO）的方式执行事务队列中的命令：
 最先入队的命令最先执行，
@@ -355,10 +355,10 @@
 </tr>
 </tbody>
 </table>
-<p>程序会首先执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 命令，
-然后执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/get.html#get" title="(in Redis 命令参考 v2.8)"><em>GET</em></a> 命令，
-再然后执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html#sadd" title="(in Redis 命令参考 v2.8)"><em>SADD</em></a> 命令，
-最后执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/smembers.html#smembers" title="(in Redis 命令参考 v2.8)"><em>SMEMBERS</em></a> 命令。</p>
+<p>程序会首先执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><span>SET</span></a> 命令，
+然后执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/get.html#get" title="(in Redis 命令参考 v2.8)"><span>GET</span></a> 命令，
+再然后执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html#sadd" title="(in Redis 命令参考 v2.8)"><span>SADD</span></a> 命令，
+最后执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/smembers.html#smembers" title="(in Redis 命令参考 v2.8)"><span>SMEMBERS</span></a> 命令。</p>
 <p>执行事务中的命令所得的结果会以 FIFO 的顺序保存到一个回复队列中。</p>
 <p>比如说，对于上面给出的事务队列，程序将为队列中的命令创建如下回复队列：</p>
 <table border="1" class="docutils">
@@ -393,7 +393,7 @@
 </tbody>
 </table>
 <p>当事务队列里的所有命令被执行完之后，
-<a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 命令会将回复队列作为自己的执行结果返回给客户端，
+<a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 命令会将回复队列作为自己的执行结果返回给客户端，
 客户端从事务状态返回到非事务状态，
 至此，
 事务执行完毕。</p>
@@ -436,36 +436,36 @@ Redis 命令都由同一个函数执行，
 <p>而事务状态则是以一个事务为单位，执行事务队列中的所有命令：除非当前事务执行完毕，否则服务器不会中断事务，也不会执行其他客户端的其他命令。</p>
 </li>
 <li><p class="first">在非事务状态下，执行命令所得的结果会立即被返回给客户端；</p>
-<p>而事务则是将所有命令的结果集合到回复队列，再作为 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 命令的结果返回给客户端。</p>
+<p>而事务则是将所有命令的结果集合到回复队列，再作为 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 命令的结果返回给客户端。</p>
 </li>
 </ol>
 </div>
 <div class="section" id="discard-multi-watch">
 <h2>事务状态下的 DISCARD 、 MULTI 和 WATCH 命令<a class="headerlink" href="#discard-multi-watch" title="Permalink to this headline">¶</a></h2>
-<p>除了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 之外，
+<p>除了 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 之外，
 服务器在客户端处于事务状态时，
-不加入到事务队列而直接执行的另外三个命令是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><em>DISCARD</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a> 。</p>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><em>DISCARD</em></a> 命令用于取消一个事务，
+不加入到事务队列而直接执行的另外三个命令是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><span>DISCARD</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a> 。</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/discard.html#discard" title="(in Redis 命令参考 v2.8)"><span>DISCARD</span></a> 命令用于取消一个事务，
 它清空客户端的整个事务队列，
 然后将客户端从事务状态调整回非事务状态，
 最后返回字符串 <code class="docutils literal"><span class="pre">OK</span></code> 给客户端，
 说明事务已被取消。</p>
 <p>Redis 的事务是不可嵌套的，
 当客户端已经处于事务状态，
-而客户端又再向服务器发送 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 时，
+而客户端又再向服务器发送 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 时，
 服务器只是简单地向客户端发送一个错误，
 然后继续等待其他命令的入队。
-<a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 命令的发送不会造成整个事务失败，
+<a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 命令的发送不会造成整个事务失败，
 也不会修改事务队列中已有的数据。</p>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a> 只能在客户端进入事务状态之前执行，
-在事务状态下发送 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a> 命令会引发一个错误，
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a> 只能在客户端进入事务状态之前执行，
+在事务状态下发送 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a> 命令会引发一个错误，
 但它不会造成整个事务失败，
-也不会修改事务队列中已有的数据（和前面处理 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><em>MULTI</em></a> 的情况一样）。</p>
+也不会修改事务队列中已有的数据（和前面处理 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/multi.html#multi" title="(in Redis 命令参考 v2.8)"><span>MULTI</span></a> 的情况一样）。</p>
 </div>
 <div class="section" id="watch">
 <h2>带 WATCH 的事务<a class="headerlink" href="#watch" title="Permalink to this headline">¶</a></h2>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a> 命令用于在事务开始之前监视任意数量的键：
-当调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 命令执行事务时，
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a> 命令用于在事务开始之前监视任意数量的键：
+当调用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 命令执行事务时，
 如果任意一个被监视的键已经被其他客户端修改了，
 那么整个事务不再执行，
 直接返回失败。</p>
@@ -520,9 +520,9 @@ Redis 命令都由同一个函数执行，
 </tbody>
 </table>
 <p>在时间 T4 ，客户端 B 修改了 <code class="docutils literal"><span class="pre">name</span></code> 键的值，
-当客户端 A 在 T5 执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 时，Redis 会发现 <code class="docutils literal"><span class="pre">name</span></code> 这个被监视的键已经被修改，
+当客户端 A 在 T5 执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 时，Redis 会发现 <code class="docutils literal"><span class="pre">name</span></code> 这个被监视的键已经被修改，
 因此客户端 A 的事务不会被执行，而是直接返回失败。</p>
-<p>下文就来介绍 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a> 的实现机制，并且看看事务系统是如何检查某个被监视的键是否被修改，从而保证事务的安全性的。</p>
+<p>下文就来介绍 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a> 的实现机制，并且看看事务系统是如何检查某个被监视的键是否被修改，从而保证事务的安全性的。</p>
 </div>
 <div class="section" id="id7">
 <h2>WATCH 命令的实现<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
@@ -578,7 +578,7 @@ Redis 命令都由同一个函数执行，
 </p>
 <p>其中， 键 <code class="docutils literal"><span class="pre">key1</span></code> 正在被 <code class="docutils literal"><span class="pre">client2</span></code> 、 <code class="docutils literal"><span class="pre">client5</span></code> 和 <code class="docutils literal"><span class="pre">client1</span></code> 三个客户端监视，
 其他一些键也分别被其他别的客户端监视着。</p>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><em>WATCH</em></a> 命令的作用，
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/watch.html#watch" title="(in Redis 命令参考 v2.8)"><span>WATCH</span></a> 命令的作用，
 就是将当前客户端和要监视的键在 <code class="docutils literal"><span class="pre">watched_keys</span></code> 中进行关联。</p>
 <p>举个例子，
 如果当前客户端为 <code class="docutils literal"><span class="pre">client10086</span></code> ，
@@ -642,7 +642,7 @@ Redis 命令都由同一个函数执行，
 <div class="section" id="id8">
 <h2>WATCH 的触发<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
 <p>在任何对数据库键空间（key space）进行修改的命令成功执行之后
-（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><em>FLUSHDB</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/del.html#del" title="(in Redis 命令参考 v2.8)"><em>DEL</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><em>LPUSH</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html#sadd" title="(in Redis 命令参考 v2.8)"><em>SADD</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrem.html#zrem" title="(in Redis 命令参考 v2.8)"><em>ZREM</em></a> ，诸如此类），
+（比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><span>FLUSHDB</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><span>SET</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/del.html#del" title="(in Redis 命令参考 v2.8)"><span>DEL</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/list/lpush.html#lpush" title="(in Redis 命令参考 v2.8)"><span>LPUSH</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html#sadd" title="(in Redis 命令参考 v2.8)"><span>SADD</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrem.html#zrem" title="(in Redis 命令参考 v2.8)"><span>ZREM</span></a> ，诸如此类），
 <code class="docutils literal"><span class="pre">multi.c/touchWatchedKey</span></code> 函数都会被调用 ——
 它检查数据库的 <code class="docutils literal"><span class="pre">watched_keys</span></code> 字典，
 看是否有客户端在监视已经被命令修改的键，
@@ -670,7 +670,7 @@ Redis 命令都由同一个函数执行，
     transaction -&gt; dirty_cas [label = &quot;打开选项\nREDIS_DIRTY_CAS&quot;];
 }" />
 </p>
-<p>当客户端发送 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 命令、触发事务执行时，
+<p>当客户端发送 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 命令、触发事务执行时，
 服务器会对客户端的状态进行检查：</p>
 <ul class="simple">
 <li>如果客户端的 <code class="docutils literal"><span class="pre">REDIS_DIRTY_CAS</span></code> 选项已经被打开，那么说明被客户端监视的键至少有一个已经被修改了，事务的安全性已经被破坏。服务器会放弃执行这个事务，直接向客户端返回空回复，表示事务执行失败。</li>
@@ -739,7 +739,7 @@ Redis 命令都由同一个函数执行，
 <p>如果某个客户端对 <code class="docutils literal"><span class="pre">key1</span></code> 进行了修改（比如执行 <code class="docutils literal"><span class="pre">DEL</span> <span class="pre">key1</span></code> ），
 那么所有监视 <code class="docutils literal"><span class="pre">key1</span></code> 的客户端，
 包括 <code class="docutils literal"><span class="pre">client2</span></code> 、 <code class="docutils literal"><span class="pre">client5</span></code> 和 <code class="docutils literal"><span class="pre">client1</span></code> 的 <code class="docutils literal"><span class="pre">REDIS_DIRTY_CAS</span></code> 选项都会被打开，
-当客户端 <code class="docutils literal"><span class="pre">client2</span></code> 、 <code class="docutils literal"><span class="pre">client5</span></code> 和 <code class="docutils literal"><span class="pre">client1</span></code> 执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 的时候，
+当客户端 <code class="docutils literal"><span class="pre">client2</span></code> 、 <code class="docutils literal"><span class="pre">client5</span></code> 和 <code class="docutils literal"><span class="pre">client1</span></code> 执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 的时候，
 它们的事务都会以失败告终。</p>
 <p>最后，当一个客户端结束它的事务时，无论事务是成功执行，还是失败， <code class="docutils literal"><span class="pre">watched_keys</span></code> 字典中和这个客户端相关的资料都会被清除。</p>
 </div>
@@ -767,7 +767,7 @@ Redis 命令都由同一个函数执行，
 <p>在命令入队的过程中，如果客户端向服务器发送了错误的命令，比如命令的参数数量不对，等等，
 那么服务器将向客户端返回一个出错信息，
 并且将客户端的事务状态设为 <code class="docutils literal"><span class="pre">REDIS_DIRTY_EXEC</span></code> 。</p>
-<p>当客户端执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><em>EXEC</em></a> 命令时，
+<p>当客户端执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/transaction/exec.html#exec" title="(in Redis 命令参考 v2.8)"><span>EXEC</span></a> 命令时，
 Redis 会拒绝执行状态为 <code class="docutils literal"><span class="pre">REDIS_DIRTY_EXEC</span></code> 的事务，
 并返回失败信息。</p>
 <div class="highlight-c"><div class="highlight"><pre>redis 127.0.0.1:6379&gt; MULTI
@@ -883,7 +883,7 @@ redis 127.0.0.1:6379&gt; EXEC
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

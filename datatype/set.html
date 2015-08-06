@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="有序集" href="sorted_set.html" />
     <link rel="prev" title="列表" href="list.html" /> 
@@ -60,7 +60,7 @@
             
   <div class="section" id="set-chapter">
 <span id="id1"></span><h1>集合<a class="headerlink" href="#set-chapter" title="Permalink to this headline">¶</a></h1>
-<p><code class="docutils literal"><span class="pre">REDIS_SET</span></code> （集合）是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html#sadd" title="(in Redis 命令参考 v2.8)"><em>SADD</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/srandmember.html#srandmember" title="(in Redis 命令参考 v2.8)"><em>SRANDMEMBER</em></a> 等命令的操作对象，
+<p><code class="docutils literal"><span class="pre">REDIS_SET</span></code> （集合）是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sadd.html#sadd" title="(in Redis 命令参考 v2.8)"><span>SADD</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/srandmember.html#srandmember" title="(in Redis 命令参考 v2.8)"><span>SRANDMEMBER</span></a> 等命令的操作对象，
 它使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_INTSET</span></code> 和 <code class="docutils literal"><span class="pre">REDIS_ENCODING_HT</span></code> 两种方式编码：</p>
 <p class="graphviz">
 <img src="../_images/graphviz-2f54a5b62b3507f0e6d579358e426c78b0dfbd5c.svg" alt="digraph redis_set {
@@ -168,12 +168,12 @@
 主要是对 <code class="docutils literal"><span class="pre">intset</span></code> 和 <code class="docutils literal"><span class="pre">dict</span></code> 两个数据结构的操作函数的包装，
 以及一些在两种编码之间进行转换的函数，
 大部分都没有什么需要解释的地方，
-唯一比较有趣的是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sinter.html#sinter" title="(in Redis 命令参考 v2.8)"><em>SINTER</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sunion.html#sunion" title="(in Redis 命令参考 v2.8)"><em>SUNION</em></a> 等命令之下的算法实现，
+唯一比较有趣的是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sinter.html#sinter" title="(in Redis 命令参考 v2.8)"><span>SINTER</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sunion.html#sunion" title="(in Redis 命令参考 v2.8)"><span>SUNION</span></a> 等命令之下的算法实现，
 以下三个小节就分别讨论它们所使用的算法。</p>
 </div>
 <div class="section" id="id6">
 <h2>求交集算法<a class="headerlink" href="#id6" title="Permalink to this headline">¶</a></h2>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sinter.html#sinter" title="(in Redis 命令参考 v2.8)"><em>SINTER</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sinterstore.html#sinterstore" title="(in Redis 命令参考 v2.8)"><em>SINTERSTORE</em></a> 两个命令所使用的求并交集算法可以用 Python 表示如下：</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sinter.html#sinter" title="(in Redis 命令参考 v2.8)"><span>SINTER</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sinterstore.html#sinterstore" title="(in Redis 命令参考 v2.8)"><span>SINTERSTORE</span></a> 两个命令所使用的求并交集算法可以用 Python 表示如下：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
 
 <span class="k">def</span> <span class="nf">sinter</span><span class="p">(</span><span class="o">*</span><span class="n">multi_set</span><span class="p">):</span>
@@ -204,7 +204,7 @@
 </div>
 <div class="section" id="id7">
 <h2>求并集算法<a class="headerlink" href="#id7" title="Permalink to this headline">¶</a></h2>
-<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sunion.html#sunion" title="(in Redis 命令参考 v2.8)"><em>SUNION</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sunionstore.html#sunionstore" title="(in Redis 命令参考 v2.8)"><em>SUNIONSTORE</em></a> 两个命令所使用的求并集算法可以用 Python 表示如下：</p>
+<p><a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sunion.html#sunion" title="(in Redis 命令参考 v2.8)"><span>SUNION</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sunionstore.html#sunionstore" title="(in Redis 命令参考 v2.8)"><span>SUNIONSTORE</span></a> 两个命令所使用的求并集算法可以用 Python 表示如下：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
 
 <span class="k">def</span> <span class="nf">sunion</span><span class="p">(</span><span class="o">*</span><span class="n">multi_set</span><span class="p">):</span>
@@ -223,7 +223,7 @@
 </div>
 <div class="section" id="id8">
 <h2>求差集算法<a class="headerlink" href="#id8" title="Permalink to this headline">¶</a></h2>
-<p>Redis 为 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sdiff.html#sdiff" title="(in Redis 命令参考 v2.8)"><em>SDIFF</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sdiffstore.html#sdiffstore" title="(in Redis 命令参考 v2.8)"><em>SDIFFSTORE</em></a> 两个命令准备了两种求集合差的算法。</p>
+<p>Redis 为 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sdiff.html#sdiff" title="(in Redis 命令参考 v2.8)"><span>SDIFF</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/set/sdiffstore.html#sdiffstore" title="(in Redis 命令参考 v2.8)"><span>SDIFFSTORE</span></a> 两个命令准备了两种求集合差的算法。</p>
 <p>以 Python 代码表示的算法一定义如下：</p>
 <div class="highlight-python"><div class="highlight"><pre><span class="c"># coding: utf-8</span>
 
@@ -339,7 +339,7 @@
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

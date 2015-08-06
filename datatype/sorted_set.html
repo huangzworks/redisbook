@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="事务" href="../feature/transaction.html" />
     <link rel="prev" title="集合" href="set.html" /> 
@@ -60,7 +60,7 @@
             
   <div class="section" id="sorted-set-chapter">
 <span id="id1"></span><h1>有序集<a class="headerlink" href="#sorted-set-chapter" title="Permalink to this headline">¶</a></h1>
-<p><code class="docutils literal"><span class="pre">REDIS_ZSET</span></code> （有序集）是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><em>ZADD</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zcount.html#zcount" title="(in Redis 命令参考 v2.8)"><em>ZCOUNT</em></a> 等命令的操作对象，
+<p><code class="docutils literal"><span class="pre">REDIS_ZSET</span></code> （有序集）是 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><span>ZADD</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zcount.html#zcount" title="(in Redis 命令参考 v2.8)"><span>ZCOUNT</span></a> 等命令的操作对象，
 它使用 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 和 <code class="docutils literal"><span class="pre">REDIS_ENCODING_SKIPLIST</span></code> 两种方式编码：</p>
 <p class="graphviz">
 <img src="../_images/graphviz-4d10098056ec25ed0e239f64bbcac524bce31bc8.svg" alt="digraph redis_zset {
@@ -104,7 +104,7 @@
 </p>
 <div class="section" id="id2">
 <h2>编码的选择<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h2>
-<p>在通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><em>ZADD</em></a> 命令添加第一个元素到空 <code class="docutils literal"><span class="pre">key</span></code> 时，
+<p>在通过 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zadd.html#zadd" title="(in Redis 命令参考 v2.8)"><span>ZADD</span></a> 命令添加第一个元素到空 <code class="docutils literal"><span class="pre">key</span></code> 时，
 程序通过检查输入的第一个元素来决定该创建什么编码的有序集。</p>
 <p>如果第一个元素符合以下条件的话，
 就创建一个 <code class="docutils literal"><span class="pre">REDIS_ENCODING_ZIPLIST</span></code> 编码的有序集：</p>
@@ -234,14 +234,14 @@
 有序集可以在 <span class="math">\(O(1)\)</span> 复杂度内：</p>
 <ul class="simple">
 <li>检查给定 <code class="docutils literal"><span class="pre">member</span></code> 是否存在于有序集（被很多底层函数使用）；</li>
-<li>取出 <code class="docutils literal"><span class="pre">member</span></code> 对应的 <code class="docutils literal"><span class="pre">score</span></code> 值（实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zscore.html#zscore" title="(in Redis 命令参考 v2.8)"><em>ZSCORE</em></a> 命令）。</li>
+<li>取出 <code class="docutils literal"><span class="pre">member</span></code> 对应的 <code class="docutils literal"><span class="pre">score</span></code> 值（实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zscore.html#zscore" title="(in Redis 命令参考 v2.8)"><span>ZSCORE</span></a> 命令）。</li>
 </ul>
 <p>另一方面，
 通过使用跳跃表，
 可以让有序集支持以下两种操作：</p>
 <ul class="simple">
 <li>在 <span class="math">\(O(\log N)\)</span> 期望时间、 <span class="math">\(O(N)\)</span> 最坏时间内根据 <code class="docutils literal"><span class="pre">score</span></code> 对 <code class="docutils literal"><span class="pre">member</span></code> 进行定位（被很多底层函数使用）；</li>
-<li>范围性查找和处理操作，这是（高效地）实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrange.html#zrange" title="(in Redis 命令参考 v2.8)"><em>ZRANGE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrank.html#zrank" title="(in Redis 命令参考 v2.8)"><em>ZRANK</em></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zinterstore.html#zinterstore" title="(in Redis 命令参考 v2.8)"><em>ZINTERSTORE</em></a> 等命令的关键。</li>
+<li>范围性查找和处理操作，这是（高效地）实现 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrange.html#zrange" title="(in Redis 命令参考 v2.8)"><span>ZRANGE</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrank.html#zrank" title="(in Redis 命令参考 v2.8)"><span>ZRANK</span></a> 和 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zinterstore.html#zinterstore" title="(in Redis 命令参考 v2.8)"><span>ZINTERSTORE</span></a> 等命令的关键。</li>
 </ul>
 <p>通过同时使用字典和跳跃表，
 有序集可以高效地实现按成员查找和按顺序查找两种操作。</p>
@@ -293,7 +293,7 @@
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

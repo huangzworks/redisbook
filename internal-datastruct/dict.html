@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="跳跃表" href="skiplist.html" />
     <link rel="prev" title="双端链表" href="adlist.html" /> 
@@ -95,18 +95,18 @@
 当用户从数据库中删除键值对时，
 程序就会将这个键值对从键空间中删除；
 等等。</p>
-<p>举个例子，执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><em>FLUSHDB</em></a> 可以清空键空间里的所有键值对数据：</p>
+<p>举个例子，执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><span>FLUSHDB</span></a> 可以清空键空间里的所有键值对数据：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">FLUSHDB</span>
 <span class="n">OK</span>
 </pre></div>
 </div>
-<p>执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/dbsize.html#dbsize" title="(in Redis 命令参考 v2.8)"><em>DBSIZE</em></a> 则返回键空间里现有的键值对：</p>
+<p>执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/dbsize.html#dbsize" title="(in Redis 命令参考 v2.8)"><span>DBSIZE</span></a> 则返回键空间里现有的键值对：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">DBSIZE</span>
 <span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">0</span>
 </pre></div>
 </div>
-<p>还可以用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><em>SET</em></a> 设置一个字符串键到键空间，
-并用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/get.html#get" title="(in Redis 命令参考 v2.8)"><em>GET</em></a> 从键空间中取出该字符串键的值：</p>
+<p>还可以用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/set.html#set" title="(in Redis 命令参考 v2.8)"><span>SET</span></a> 设置一个字符串键到键空间，
+并用 <a class="reference external" href="http://redis.readthedocs.org/en/latest/string/get.html#get" title="(in Redis 命令参考 v2.8)"><span>GET</span></a> 从键空间中取出该字符串键的值：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="n">redis</span><span class="o">&gt;</span> <span class="n">SET</span> <span class="n">number</span> <span class="mi">10086</span>
 <span class="n">OK</span>
 
@@ -117,10 +117,10 @@
 <span class="p">(</span><span class="n">integer</span><span class="p">)</span> <span class="mi">1</span>
 </pre></div>
 </div>
-<p>后面的《<a class="reference internal" href="../internal/db.html#db-chapter"><em>数据库</em></a>》一章会对键空间以及数据库的实现作详细的介绍，
+<p>后面的《<a class="reference internal" href="../internal/db.html#db-chapter"><span>数据库</span></a>》一章会对键空间以及数据库的实现作详细的介绍，
 届时将看到，
 大部分针对数据库的命令，
-比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/dbsize.html#dbsize" title="(in Redis 命令参考 v2.8)"><em>DBSIZE</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><em>FLUSHDB</em></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/randomkey.html#randomkey" title="(in Redis 命令参考 v2.8)"><em>RANDOMKEY</em></a> ，
+比如 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/dbsize.html#dbsize" title="(in Redis 命令参考 v2.8)"><span>DBSIZE</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/server/flushdb.html#flushdb" title="(in Redis 命令参考 v2.8)"><span>FLUSHDB</span></a> 、 <a class="reference external" href="http://redis.readthedocs.org/en/latest/key/randomkey.html#randomkey" title="(in Redis 命令参考 v2.8)"><span>RANDOMKEY</span></a> ，
 等等，
 都是构建于对字典的操作之上的；
 而那些创建、更新、删除和查找键值对的命令，
@@ -131,7 +131,7 @@
 <p>Redis 的 Hash 类型键使用以下两种数据结构作为底层实现:</p>
 <ol class="arabic simple">
 <li>字典；</li>
-<li><a class="reference internal" href="../compress-datastruct/ziplist.html#ziplist-chapter"><em>压缩列表</em></a>；</li>
+<li><a class="reference internal" href="../compress-datastruct/ziplist.html#ziplist-chapter"><span>压缩列表</span></a>；</li>
 </ol>
 <p>因为压缩列表比字典更节省内存，
 所以程序在创建新 Hash 键时，
@@ -158,7 +158,7 @@
 <span class="mi">6</span><span class="p">)</span> <span class="s">&quot;2013.3.8&quot;</span>
 </pre></div>
 </div>
-<p>《<a class="reference internal" href="../datatype/hash.html#hash-chapter"><em>哈希表</em></a>》章节给出了关于哈希类型键的更多信息，
+<p>《<a class="reference internal" href="../datatype/hash.html#hash-chapter"><span>哈希表</span></a>》章节给出了关于哈希类型键的更多信息，
 并介绍了压缩列表和字典之间的转换条件。</p>
 <p>介绍完了字典的用途，
 现在让我们来看看字典数据结构的定义。</p>
@@ -1457,7 +1457,7 @@ Redis 使用了渐进式（incremental）的 rehash 方式：
 程序将立即对字典进行收缩；</li>
 <li>当字典用于实现数据库键空间（key space）的时候，
 收缩的时机由 <code class="docutils literal"><span class="pre">redis.c/tryResizeHashTables</span></code> 函数决定，
-具体信息请参考《<a class="reference internal" href="../internal/db.html#db-chapter"><em>数据库</em></a>》一章的《<a class="reference internal" href="../internal/db.html#db-expand-and-shrink"><em>数据库空间的收缩和扩展</em></a>》小节；</li>
+具体信息请参考《<a class="reference internal" href="../internal/db.html#db-chapter"><span>数据库</span></a>》一章的《<a class="reference internal" href="../internal/db.html#db-expand-and-shrink"><span>数据库空间的收缩和扩展</span></a>》小节；</li>
 </ul>
 </div>
 <div class="section" id="id21">
@@ -1618,7 +1618,7 @@ Redis 使用了渐进式（incremental）的 rehash 方式：
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

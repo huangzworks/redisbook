@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="对象处理机制" href="../datatype/object.html" />
     <link rel="prev" title="整数集合" href="intset.html" /> 
@@ -91,7 +91,7 @@
 </ul>
 <p>因为 ziplist 节约内存的性质，
 哈希键、列表键和有序集合键初始化的底层实现皆采用 ziplist，
-更多信息请参考《<a class="reference internal" href="../datatype/hash.html#hash-chapter"><em>哈希表</em></a>》、《<a class="reference internal" href="../datatype/list.html#list-chapter"><em>列表</em></a>》和《<a class="reference internal" href="../datatype/sorted_set.html#sorted-set-chapter"><em>有序集</em></a>》章节。</p>
+更多信息请参考《<a class="reference internal" href="../datatype/hash.html#hash-chapter"><span>哈希表</span></a>》、《<a class="reference internal" href="../datatype/list.html#list-chapter"><span>列表</span></a>》和《<a class="reference internal" href="../datatype/sorted_set.html#sorted-set-chapter"><span>有序集</span></a>》章节。</p>
 <p>本章先介绍 ziplist 的组成结构，
 以及 ziplist 节点的编码方式。
 再介绍 ziplist 的添加操作和删除操作的执行过程，
@@ -850,7 +850,7 @@
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>

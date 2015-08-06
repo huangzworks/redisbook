@@ -23,7 +23,7 @@
     <script type="text/javascript" src="../_static/jquery.js"></script>
     <script type="text/javascript" src="../_static/underscore.js"></script>
     <script type="text/javascript" src="../_static/doctools.js"></script>
-    <script type="text/javascript" src="https://c328740.ssl.cf1.rackcdn.com/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <link rel="top" title="Redis 设计与实现" href="../index.html" />
     <link rel="next" title="整数集合" href="../compress-datastruct/intset.html" />
     <link rel="prev" title="字典" href="dict.html" /> 
@@ -87,7 +87,7 @@ Redis 基于 William Pugh 论文中描述的跳跃表进行了以下修改：</p
 <ol class="arabic simple">
 <li>允许重复的 <code class="docutils literal"><span class="pre">score</span></code> 值：多个不同的 <code class="docutils literal"><span class="pre">member</span></code> 的 <code class="docutils literal"><span class="pre">score</span></code> 值可以相同。</li>
 <li>进行对比操作时，不仅要检查 <code class="docutils literal"><span class="pre">score</span></code> 值，还要检查 <code class="docutils literal"><span class="pre">member</span></code> ：当 <code class="docutils literal"><span class="pre">score</span></code> 值可以重复时，单靠 <code class="docutils literal"><span class="pre">score</span></code> 值无法判断一个元素的身份，所以需要连 <code class="docutils literal"><span class="pre">member</span></code> 域都一并检查才行。</li>
-<li>每个节点都带有一个高度为 1 层的后退指针，用于从表尾方向向表头方向迭代：当执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrevrange.html#zrevrange" title="(in Redis 命令参考 v2.8)"><em>ZREVRANGE</em></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrevrangebyscore.html#zrevrangebyscore" title="(in Redis 命令参考 v2.8)"><em>ZREVRANGEBYSCORE</em></a> 这类以逆序处理有序集的命令时，就会用到这个属性。</li>
+<li>每个节点都带有一个高度为 1 层的后退指针，用于从表尾方向向表头方向迭代：当执行 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrevrange.html#zrevrange" title="(in Redis 命令参考 v2.8)"><span>ZREVRANGE</span></a> 或 <a class="reference external" href="http://redis.readthedocs.org/en/latest/sorted_set/zrevrangebyscore.html#zrevrangebyscore" title="(in Redis 命令参考 v2.8)"><span>ZREVRANGEBYSCORE</span></a> 这类以逆序处理有序集的命令时，就会用到这个属性。</li>
 </ol>
 <p>这个修改版的跳跃表由 <code class="docutils literal"><span class="pre">redis.h/zskiplist</span></code> 结构定义：</p>
 <div class="highlight-c"><div class="highlight"><pre><span class="k">typedef</span> <span class="k">struct</span> <span class="n">zskiplist</span> <span class="p">{</span>
@@ -262,7 +262,7 @@ Redis 为 <code class="docutils literal"><span class="pre">x</span></code> 、 <
 但是在实际的定义中，
 因为跳跃表要和另一个实现有序集的结构（字典）分享 <code class="docutils literal"><span class="pre">member</span></code> 和 <code class="docutils literal"><span class="pre">score</span></code> 值，
 所以跳跃表只保存指向 <code class="docutils literal"><span class="pre">member</span></code> 和 <code class="docutils literal"><span class="pre">score</span></code> 的指针。
-更详细的信息，请参考《<a class="reference internal" href="../datatype/sorted_set.html#sorted-set-chapter"><em>有序集</em></a>》章节。</p>
+更详细的信息，请参考《<a class="reference internal" href="../datatype/sorted_set.html#sorted-set-chapter"><span>有序集</span></a>》章节。</p>
 </div>
 <div class="section" id="id5">
 <h2>小结<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h2>
@@ -324,7 +324,7 @@ Redis 为 <code class="docutils literal"><span class="pre">x</span></code> 、 <
     </div>
     <div class="footer">
         &copy; Copyright 2013, huangz1990.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3b1.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.3.1.
     </div>
   </body>
 </html>
