@@ -4,24 +4,24 @@
    contain the root `toctree` directive.
 
 
-Redis 设计与实现（第一版）
+Redis设计与实现（原始版）
 =================================================================
 
 .. warning::
 
-    你正在阅读的是《Redis 设计与实现》第一版（旧版），
-    请访问 `RedisBook.com <http://RedisBook.com/>`_ ，
+    你正在阅读的是《Redis设计与实现（原始版）》，
+    请访问 `huangz.works/redisbook <http://huangz.works/redisbook>`_ ，
     查看关注 Redis 3.0 、包含更多新内容的新版《Redis 设计与实现》。
-
-本书的目标是以简明易懂的方式讲解 Redis 的内部运行机制，
-通过阅读本书，
-你可以了解到 Redis 从数据结构到服务器构造在内的几乎所有知识。
 
 .. image:: redis-logo-small.png
    :align: left
    :width: 454px
    :height: 151px
    :scale: 55%
+
+本书的目标是以简明易懂的方式讲解 Redis 的内部运行机制，
+通过阅读本书，
+你可以了解到 Redis 从数据结构到服务器构造在内的几乎所有知识。
 
 为了保证内容的简洁性，
 本书会尽量以高抽象层次的角度来观察 Redis ，
@@ -33,7 +33,7 @@ Redis 设计与实现（第一版）
 
 另一方面，
 对于需要深入研究 Redis 代码的读者，
-本书附带了一份 `带有详细注释的 Redis 2.6 源代码 <https://github.com/huangz1990/annotated_redis_source>`_ ，
+本书附带了一份 `带有详细注释的 Redis 2.6 源代码 <https://github.com/huangzworks/annotated_redis_source>`_ ，
 可以配合本书一并使用。
 
 
@@ -189,19 +189,19 @@ Redis 还提供了一些同时对多个键值对进行处理的功能，
 关于
 -------------------
 
-本书由 `huangz <http://huangz.me/>`_ 编写。
+本书由 `huangz <http://huangz.works/>`_ 编写。
 
 我在研究 Redis 源码并创作本书的过程中获得了极大的快乐，希望你在阅读本书时也能有同感。
 
 评论、问题、意见或建议都可以发表在本书自带的 disqus 论坛里，
-也可以通过 `豆瓣 <http://www.douban.com/people/i_m_huangz/>`_ 、 `微博 <http://weibo.com/huangz1990>`_ 或 `Twitter <https://twitter.com/huangz1990>`_ 联系我，
+也可以通过 `豆瓣 <https://www.douban.com/people/273300993>`_ 、 `微博 <https://weibo.com/u/3219474004>`_ 或 `Twitter <https://twitter.com/huangzworks>`_ 联系我，
 我会尽可能地回复。
 
-要获得本书的最新动态，请关注 `redisbook <https://github.com/huangz1990/redisbook>`_ 项目。
+要获得本书的最新动态，请关注 `redisbook <https://github.com/huangzworks/redisbook>`_ 项目。
 
-要了解编写本书时用到的工具（源码管理、文档的生成和托管、图片生成，等等），请阅读 `这篇文章 <http://blog.huangz.me/diary/2013/tools-for-writing-redisbook.html>`_ 。
+要了解编写本书时用到的工具（源码管理、文档的生成和托管、图片生成，等等），请阅读 `这篇文章 <http://huangz.blog/2013/tools-for-writing-redisbook.html>`_ 。
 
-下载本书离线版本： `pdf 格式 <https://github.com/huangz1990/redisbook/raw/master/pdf/redisbook.pdf>`_ 或 `html 格式 <https://media.readthedocs.org/htmlzip/redisbook/latest/redisbook.zip>`_ 。
+下载本书离线版本： `pdf 格式 <https://github.com/huangzworks/redisbook/raw/master/pdf/redisbook.pdf>`_ 或 `html 格式 <https://media.readthedocs.org/htmlzip/redisbook/latest/redisbook.zip>`_ 。
 
 
 通过捐款支持本书
