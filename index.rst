@@ -10,7 +10,7 @@ Redis设计与实现（原始版）
 .. warning::
 
     你正在阅读的是《Redis设计与实现（原始版）》，
-    请访问 `huangz.works/redisbook <http://huangz.works/redisbook>`_ ，
+    请访问 `huangz.works/redisbook1e <http://huangz.works/redisbook1e>`_ ，
     查看关注 Redis 3.0 、包含更多新内容的新版《Redis 设计与实现》。
 
 .. image:: redis-logo-small.png
