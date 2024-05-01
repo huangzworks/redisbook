@@ -2,13 +2,13 @@
 ===========
 
 这是《Redis 设计与实现》第一版的原稿，
-在线阅读请访问 http://origin.redisbook.com/ 。
+在线阅读请访问 http://huangz.works/redisbook 。
 
 
 声明
 ===========
 
-本书由 `huangz <http://huangz.me>`_ 撰写，保留所有权利。
+本书由 `黄健宏 <http://huangz.works>`_ 撰写，保留所有权利。
 
 
 贡献者
